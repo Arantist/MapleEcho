@@ -1,0 +1,14 @@
+.git/
+node_modules/
+.next/
+.venv/
+data/
+out/
+dist/
+coverage/
+.env*
+!.env.example
+*.log
+.DS_Store
+tests/
+vitest.config.ts
