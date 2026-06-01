@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { FFPROBE_BIN } from "@/lib/media-tools";
 
 export async function hasAudioStream(filePath: string): Promise<boolean> {
   const args = [
@@ -14,7 +15,7 @@ export async function hasAudioStream(filePath: string): Promise<boolean> {
   ];
 
   return new Promise((resolve) => {
-    const child = spawn("ffprobe", args, { stdio: ["ignore", "pipe", "ignore"] });
+    const child = spawn(FFPROBE_BIN, args, { stdio: ["ignore", "pipe", "ignore"] });
     let output = "";
     child.stdout.on("data", (chunk) => {
       output += chunk.toString();

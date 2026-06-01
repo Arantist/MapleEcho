@@ -418,13 +418,18 @@ function PracticePanel() {
 function SystemPanel({ system }: { system: SystemCheck | null }) {
   return (
     <div className="rounded-lg border border-[#deded8] bg-white p-5 shadow-sm">
-      <div className="mb-3 font-semibold text-[#1d1d1b]">本机环境</div>
+      <div className="mb-3 font-semibold text-[#1d1d1b]">运行环境</div>
       <div className="space-y-2">
         {system
           ? Object.entries(system).map(([key, item]) => (
-              <div key={key} className="flex items-center justify-between gap-3 border-t border-[#eeeeea] pt-2 text-sm first:border-t-0 first:pt-0">
-                <span className="font-medium">{item.label}</span>
-                <span className={item.ok ? "text-[#6f6248]" : "text-[#a33a42]"}>
+              <div key={key} className="flex items-start justify-between gap-3 border-t border-[#eeeeea] pt-2 text-sm first:border-t-0 first:pt-0">
+                <span className="min-w-0">
+                  <span className="block font-medium">{item.label}</span>
+                  <span className="mt-0.5 block truncate text-xs text-[#8e897f]" title={item.detail}>
+                    {item.detail}
+                  </span>
+                </span>
+                <span className={`shrink-0 ${item.ok ? "text-[#6f6248]" : "text-[#a33a42]"}`}>
                   {item.ok ? "可用" : "不可用"}
                 </span>
               </div>

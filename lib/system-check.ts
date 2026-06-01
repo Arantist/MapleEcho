@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { DEFAULT_PYTHON } from "@/lib/paths";
+import { FFMPEG_BIN, FFPROBE_BIN } from "@/lib/media-tools";
 
 export type ParsedVersion = {
   raw: string;
@@ -42,8 +43,8 @@ export function isRecommendedPythonVersion(version: ParsedVersion) {
 export async function checkSystem(pythonBin = DEFAULT_PYTHON): Promise<SystemCheckResult> {
   const [python, ffmpeg, ffprobe, demucs, torch, mps] = await Promise.all([
     checkPython(pythonBin),
-    commandCheck("ffmpeg", ["-version"], "ffmpeg"),
-    commandCheck("ffprobe", ["-version"], "ffprobe"),
+    commandCheck(FFMPEG_BIN, ["-version"], "ffmpeg"),
+    commandCheck(FFPROBE_BIN, ["-version"], "ffprobe"),
     pythonModuleCheck(pythonBin, "demucs"),
     pythonInlineCheck(pythonBin, "import torch; print(torch.__version__)"),
     pythonInlineCheck(pythonBin, "import torch; print(torch.backends.mps.is_available())")
