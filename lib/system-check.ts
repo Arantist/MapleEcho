@@ -41,14 +41,22 @@ export function isRecommendedPythonVersion(version: ParsedVersion) {
 }
 
 export async function checkSystem(pythonBin = DEFAULT_PYTHON): Promise<SystemCheckResult> {
-  const [python, ffmpeg, ffprobe, demucs, torch, mps] = await Promise.all([
+  const [python, ffmpeg, ffprobe] = await Promise.all([
     checkPython(pythonBin),
     commandCheck(FFMPEG_BIN, ["-version"], "ffmpeg"),
-    commandCheck(FFPROBE_BIN, ["-version"], "ffprobe"),
-    pythonModuleCheck(pythonBin, "demucs"),
-    pythonInlineCheck(pythonBin, "import torch; print(torch.__version__)"),
-    pythonInlineCheck(pythonBin, "import torch; print(torch.backends.mps.is_available())")
+    commandCheck(FFPROBE_BIN, ["-version"], "ffprobe")
   ]);
+  const [demucs, torch, mps] = python.ok
+    ? await Promise.all([
+        pythonModuleCheck(pythonBin, "demucs"),
+        pythonInlineCheck(pythonBin, "import torch; print(torch.__version__)"),
+        pythonInlineCheck(pythonBin, "import torch; print(torch.backends.mps.is_available())")
+      ])
+    : [
+        unavailable("demucs", "需要可执行的 Python 环境。"),
+        unavailable("torch", "需要可执行的 Python 环境。"),
+        unavailable("MPS", "需要可执行的 Python 环境。")
+      ];
 
   return {
     python,
@@ -58,6 +66,10 @@ export async function checkSystem(pythonBin = DEFAULT_PYTHON): Promise<SystemChe
     torch: { ...torch, label: "torch" },
     mps: { ...mps, label: "MPS", ok: mps.ok && mps.detail.includes("True") }
   };
+}
+
+function unavailable(label: string, detail: string): ToolCheck {
+  return { ok: false, label, detail };
 }
 
 async function checkPython(pythonBin: string): Promise<ToolCheck> {
