@@ -8,5 +8,7 @@ coverage/
 .venv/
 data/
 .vercel/
+__pycache__/
+*.pyc
 *.log
 .DS_Store

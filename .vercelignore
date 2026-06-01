@@ -3,6 +3,8 @@ node_modules/
 .next/
 .venv/
 data/
+__pycache__/
+*.pyc
 out/
 dist/
 coverage/
