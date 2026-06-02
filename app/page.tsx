@@ -13,59 +13,45 @@ import {
   SlidersHorizontal,
   Upload
 } from "lucide-react";
-import {
-  API_CONFIGURATION_ERROR,
-  API_UNAVAILABLE_ERROR,
-  createBackendJob,
-  fetchBackendHealth,
-  fetchBackendJob
-} from "@/lib/api-client";
 import { clampPlaybackTime, formatPlaybackTime, progressPercent } from "@/lib/player";
-import type { BackendHealth, JobMode, JobRecord } from "@/lib/types";
+import type { JobMode, JobRecord } from "@/lib/types";
+
+type SystemCheck = Record<string, { ok: boolean; label: string; detail: string; recommended?: boolean }>;
 
 export default function Home() {
   const [mode, setMode] = useState<JobMode>("speed");
   const [file, setFile] = useState<File | null>(null);
   const [job, setJob] = useState<JobRecord | null>(null);
-  const [system, setSystem] = useState<BackendHealth | null>(null);
+  const [system, setSystem] = useState<SystemCheck | null>(null);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-  const hasApiBaseUrl = apiBaseUrl.trim().length > 0;
 
   const isBusy = uploading || job?.status === "queued" || job?.status === "running";
   const resultReady = job?.status === "completed";
 
   useEffect(() => {
-    if (!hasApiBaseUrl) {
-      setError(API_CONFIGURATION_ERROR);
-      return;
-    }
-    fetchBackendHealth(apiBaseUrl)
+    fetch("/api/system/check")
+      .then((response) => response.json())
       .then(setSystem)
-      .catch(() => {
-        setSystem(null);
-        setError(API_UNAVAILABLE_ERROR);
-      });
-  }, [apiBaseUrl, hasApiBaseUrl]);
+      .catch(() => setSystem(null));
+  }, []);
 
   useEffect(() => {
     if (!job || job.status === "completed" || job.status === "failed") return;
     const timer = window.setInterval(async () => {
-      try {
-        setJob(await fetchBackendJob(job.id, apiBaseUrl));
-      } catch {
-        setError(API_UNAVAILABLE_ERROR);
+      const response = await fetch(`/api/jobs/${job.id}`);
+      if (response.ok) {
+        setJob(await response.json());
       }
-    }, 2000);
+    }, 1800);
     return () => window.clearInterval(timer);
-  }, [apiBaseUrl, job]);
+  }, [job]);
 
   const statusText = useMemo(() => {
     if (!job) return "等待上传";
     if (job.status === "queued") return "排队中";
-    if (job.status === "running") return "分离中";
+    if (job.status === "running") return `分离中${job.device ? ` · ${job.device.toUpperCase()}` : ""}`;
     if (job.status === "completed") return "已完成";
     return "处理失败";
   }, [job]);
@@ -75,18 +61,24 @@ export default function Home() {
       setError("请先选择一个音频文件。");
       return;
     }
-    if (!hasApiBaseUrl) {
-      setError(API_CONFIGURATION_ERROR);
-      return;
-    }
     setUploading(true);
     setError("");
     setJob(null);
 
+    const form = new FormData();
+    form.append("file", file);
+    form.append("mode", mode);
+
     try {
-      setJob(await createBackendJob({ file, mode, baseUrl: apiBaseUrl }));
-    } catch (error) {
-      setError(error instanceof Error ? error.message : API_UNAVAILABLE_ERROR);
+      const response = await fetch("/api/jobs", { method: "POST", body: form });
+      const payload = await response.json();
+      if (!response.ok) {
+        setError(payload.error || "上传失败。");
+        return;
+      }
+      setJob(payload);
+    } catch {
+      setError("无法连接本机处理服务。");
     } finally {
       setUploading(false);
     }
@@ -101,16 +93,16 @@ export default function Home() {
               <Music2 size={20} />
             </div>
             <div>
-              <div className="text-base font-semibold tracking-[0.08em]">忆枫MapleEcho</div>
+              <div className="text-base font-semibold tracking-[0.08em]">A门</div>
               <div className="text-xs text-[#73716c]">再也不用付费做伴奏啦～</div>
             </div>
           </div>
           <div className="hidden items-center gap-2 text-sm text-[#5d5b56] sm:flex">
             <span>单文件</span>
             <span className="h-1 w-1 rounded-full bg-[#b9b6ad]" />
-            <span>后端处理</span>
+            <span>本机处理</span>
             <span className="h-1 w-1 rounded-full bg-[#b9b6ad]" />
-            <span>Render 服务</span>
+            <span>不上传云端</span>
           </div>
         </div>
       </header>
@@ -122,10 +114,10 @@ export default function Home() {
               <div>
                 <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#8b806c]">Local Stem Studio</div>
                 <h1 className="max-w-2xl text-2xl font-semibold leading-tight tracking-normal text-[#151515] sm:text-3xl">
-                  上传音频，分离伴奏和人声
+                  上传音频，分离伴奏、人声和吉他
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-[#66635d]">
-                  选择一个音频文件，Render 后端调用 Demucs 生成 vocals 和 instrumental。
+                  选择一个音频文件，本机调用 Demucs 6-stem 模型生成 vocals、instrumental、guitar 和 no guitar。
                 </p>
               </div>
               <div className="hidden rounded border border-[#ddd6c6] bg-[#faf9f6] px-3 py-2 text-xs font-semibold text-[#6f6248] shadow-sm sm:block">
@@ -156,13 +148,13 @@ export default function Home() {
               <ModeButton
                 active={mode === "speed"}
                 title="速度模式"
-                body="后端使用 mdx_q 模型。"
+                body="使用 htdemucs_6s，单次预测。"
                 onClick={() => setMode("speed")}
               />
               <ModeButton
                 active={mode === "quality"}
                 title="质量模式"
-                body="后端使用 htdemucs_ft 模型。"
+                body="使用 htdemucs_6s，双次 shift 平均。"
                 onClick={() => setMode("quality")}
               />
             </div>
@@ -196,7 +188,7 @@ export default function Home() {
               />
             </div>
             <div className="mt-3 text-sm text-[#706d66]">
-              {job ? job.message || `任务 ID：${job.id}` : "完成后会在这里显示试听和下载入口。"}
+              {job ? `任务 ID：${job.id}` : "完成后会在这里显示试听和下载入口。"}
             </div>
           </div>
         </div>
@@ -207,15 +199,29 @@ export default function Home() {
               title="Instrumental"
               subtitle="无人声伴奏"
               enabled={resultReady}
-              src={resultReady ? job.files?.instrumental ?? "" : ""}
-              downloadHref={resultReady ? job.files?.instrumental ?? "" : ""}
+              src={resultReady ? `/api/jobs/${job.id}/files/instrumental` : ""}
+              downloadHref={resultReady ? `/api/jobs/${job.id}/files/instrumental` : ""}
             />
             <ResultPanel
               title="Vocals"
               subtitle="人声"
               enabled={resultReady}
-              src={resultReady ? job.files?.vocals ?? "" : ""}
-              downloadHref={resultReady ? job.files?.vocals ?? "" : ""}
+              src={resultReady ? `/api/jobs/${job.id}/files/vocals` : ""}
+              downloadHref={resultReady ? `/api/jobs/${job.id}/files/vocals` : ""}
+            />
+            <ResultPanel
+              title="Guitar"
+              subtitle="吉他"
+              enabled={resultReady}
+              src={resultReady ? `/api/jobs/${job.id}/files/guitar` : ""}
+              downloadHref={resultReady ? `/api/jobs/${job.id}/files/guitar` : ""}
+            />
+            <ResultPanel
+              title="No Guitar"
+              subtitle="无吉他版本"
+              enabled={resultReady}
+              src={resultReady ? `/api/jobs/${job.id}/files/no_guitar` : ""}
+              downloadHref={resultReady ? `/api/jobs/${job.id}/files/no_guitar` : ""}
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -409,27 +415,18 @@ function PracticePanel() {
   );
 }
 
-function SystemPanel({ system }: { system: BackendHealth | null }) {
-  const service = system?.service ?? "";
-  const entries = system
-    ? [
-        { key: "python", label: "python", ok: system.python },
-        { key: "ffmpeg", label: "ffmpeg", ok: system.ffmpeg },
-        { key: "ffprobe", label: "ffprobe", ok: system.ffprobe },
-        { key: "demucs", label: "demucs", ok: system.demucs }
-      ]
-    : null;
+function SystemPanel({ system }: { system: SystemCheck | null }) {
   return (
     <div className="rounded-lg border border-[#deded8] bg-white p-5 shadow-sm">
-      <div className="mb-3 font-semibold text-[#1d1d1b]">后端运行环境</div>
+      <div className="mb-3 font-semibold text-[#1d1d1b]">运行环境</div>
       <div className="space-y-2">
-        {entries
-          ? entries.map((item) => (
-              <div key={item.key} className="flex items-start justify-between gap-3 border-t border-[#eeeeea] pt-2 text-sm first:border-t-0 first:pt-0">
+        {system
+          ? Object.entries(system).map(([key, item]) => (
+              <div key={key} className="flex items-start justify-between gap-3 border-t border-[#eeeeea] pt-2 text-sm first:border-t-0 first:pt-0">
                 <span className="min-w-0">
                   <span className="block font-medium">{item.label}</span>
-                  <span className="mt-0.5 block truncate text-xs text-[#8e897f]" title={service}>
-                    {service}
+                  <span className="mt-0.5 block truncate text-xs text-[#8e897f]" title={item.detail}>
+                    {item.detail}
                   </span>
                 </span>
                 <span className={`shrink-0 ${item.ok ? "text-[#6f6248]" : "text-[#a33a42]"}`}>
@@ -437,7 +434,7 @@ function SystemPanel({ system }: { system: BackendHealth | null }) {
                 </span>
               </div>
             ))
-          : ["python", "ffmpeg", "ffprobe", "demucs"].map((item) => (
+          : ["python", "ffmpeg", "demucs", "torch", "MPS"].map((item) => (
               <div key={item} className="flex items-center justify-between border-t border-[#eeeeea] pt-2 text-sm text-[#aaa69d] first:border-t-0 first:pt-0">
                 <span>{item}</span>
                 <span>检查中</span>

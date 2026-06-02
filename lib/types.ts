@@ -1,8 +1,6 @@
 export type JobMode = "speed" | "quality";
 export type JobStatus = "queued" | "running" | "completed" | "failed";
 export type StemName = "vocals" | "instrumental" | "guitar" | "no_guitar";
-export type BackendJobMode = "fast" | "quality";
-export type BackendJobStatus = "queued" | "processing" | "completed" | "failed";
 
 export type JobFileLinks = {
   vocals?: string;
@@ -18,7 +16,6 @@ export type JobRecord = {
   mode: JobMode;
   status: JobStatus;
   progress: number;
-  message?: string;
   error?: string;
   warning?: string;
   device?: "mps" | "cpu";
@@ -40,24 +37,4 @@ export type JobPaths = {
   guitarFile: string;
   noGuitarFile: string;
   workerLog: string;
-};
-
-export type BackendJobResponse = {
-  jobId: string;
-  status: BackendJobStatus;
-  progress?: number;
-  message?: string;
-  outputs?: {
-    vocals?: string;
-    instrumental?: string;
-  };
-};
-
-export type BackendHealth = {
-  ok: boolean;
-  service: "audio-separation-backend";
-  ffmpeg: boolean;
-  ffprobe: boolean;
-  python: boolean;
-  demucs: boolean;
 };
