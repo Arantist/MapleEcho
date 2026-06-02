@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: audio-separation-backend
+    runtime: docker
+    rootDir: backend
+    plan: starter
+    envVars:
+      - key: CORS_ORIGINS
+        value: http://localhost:3000

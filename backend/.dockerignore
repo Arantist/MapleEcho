@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+/tmp/audio-jobs/
+../node_modules/
+../.next/
+../data/
+../.git/
