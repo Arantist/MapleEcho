@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "A门",
+  title: "忆枫MapleEcho",
   description: "再也不用付费做伴奏啦～"
 };
 

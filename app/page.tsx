@@ -93,7 +93,7 @@ export default function Home() {
               <Music2 size={20} />
             </div>
             <div>
-              <div className="text-base font-semibold tracking-[0.08em]">A门</div>
+              <div className="text-base font-semibold tracking-[0.08em]">忆枫MapleEcho</div>
               <div className="text-xs text-[#73716c]">再也不用付费做伴奏啦～</div>
             </div>
           </div>
