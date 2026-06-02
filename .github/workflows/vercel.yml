@@ -27,8 +27,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      - name: Run checks
+        run: npm run check
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
@@ -62,8 +62,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      - name: Run checks
+        run: npm run check
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
