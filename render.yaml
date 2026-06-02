@@ -6,4 +6,4 @@ services:
     plan: starter
     envVars:
       - key: CORS_ORIGINS
-        value: http://localhost:3000
+        value: http://localhost:3000,https://fengye-rain.life,https://www.fengye-rain.life

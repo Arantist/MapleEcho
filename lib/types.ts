@@ -50,6 +50,8 @@ export type BackendJobResponse = {
   outputs?: {
     vocals?: string;
     instrumental?: string;
+    guitar?: string;
+    no_guitar?: string;
   };
 };
 

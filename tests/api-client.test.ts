@@ -34,7 +34,9 @@ describe("api client", () => {
           message: "Separating",
           outputs: {
             vocals: "/api/jobs/job-1/download/vocals",
-            instrumental: "/api/jobs/job-1/download/instrumental"
+            instrumental: "/api/jobs/job-1/download/instrumental",
+            guitar: "/api/jobs/job-1/download/guitar",
+            no_guitar: "/api/jobs/job-1/download/no_guitar"
           }
         },
         "https://audio-backend.onrender.com"
@@ -46,7 +48,9 @@ describe("api client", () => {
       message: "Separating",
       files: {
         vocals: "https://audio-backend.onrender.com/api/jobs/job-1/download/vocals",
-        instrumental: "https://audio-backend.onrender.com/api/jobs/job-1/download/instrumental"
+        instrumental: "https://audio-backend.onrender.com/api/jobs/job-1/download/instrumental",
+        guitar: "https://audio-backend.onrender.com/api/jobs/job-1/download/guitar",
+        no_guitar: "https://audio-backend.onrender.com/api/jobs/job-1/download/no_guitar"
       }
     });
   });

@@ -122,10 +122,10 @@ export default function Home() {
               <div>
                 <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#8b806c]">Local Stem Studio</div>
                 <h1 className="max-w-2xl text-2xl font-semibold leading-tight tracking-normal text-[#151515] sm:text-3xl">
-                  上传音频，分离伴奏和人声
+                  上传音频，分离伴奏、人声和吉他
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-[#66635d]">
-                  选择一个音频文件，Render 后端调用 Demucs 生成 vocals 和 instrumental。
+                  选择一个音频文件，Render 后端调用 Demucs 6-stem 模型生成 vocals、instrumental、guitar 和 no guitar。
                 </p>
               </div>
               <div className="hidden rounded border border-[#ddd6c6] bg-[#faf9f6] px-3 py-2 text-xs font-semibold text-[#6f6248] shadow-sm sm:block">
@@ -156,13 +156,13 @@ export default function Home() {
               <ModeButton
                 active={mode === "speed"}
                 title="速度模式"
-                body="后端使用 mdx_q 模型。"
+                body="使用 htdemucs_6s，单次预测。"
                 onClick={() => setMode("speed")}
               />
               <ModeButton
                 active={mode === "quality"}
                 title="质量模式"
-                body="后端使用 htdemucs_ft 模型。"
+                body="使用 htdemucs_6s，双次 shift 平均。"
                 onClick={() => setMode("quality")}
               />
             </div>
@@ -206,16 +206,30 @@ export default function Home() {
             <ResultPanel
               title="Instrumental"
               subtitle="无人声伴奏"
-              enabled={resultReady}
+              enabled={Boolean(resultReady && job.files?.instrumental)}
               src={resultReady ? job.files?.instrumental ?? "" : ""}
               downloadHref={resultReady ? job.files?.instrumental ?? "" : ""}
             />
             <ResultPanel
               title="Vocals"
               subtitle="人声"
-              enabled={resultReady}
+              enabled={Boolean(resultReady && job.files?.vocals)}
               src={resultReady ? job.files?.vocals ?? "" : ""}
               downloadHref={resultReady ? job.files?.vocals ?? "" : ""}
+            />
+            <ResultPanel
+              title="Guitar"
+              subtitle="吉他"
+              enabled={Boolean(resultReady && job.files?.guitar)}
+              src={resultReady ? job.files?.guitar ?? "" : ""}
+              downloadHref={resultReady ? job.files?.guitar ?? "" : ""}
+            />
+            <ResultPanel
+              title="No Guitar"
+              subtitle="无吉他版本"
+              enabled={Boolean(resultReady && job.files?.no_guitar)}
+              src={resultReady ? job.files?.no_guitar ?? "" : ""}
+              downloadHref={resultReady ? job.files?.no_guitar ?? "" : ""}
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -270,7 +284,7 @@ function ResultPanel({
       <AudioPlayer enabled={enabled} src={src} label={title} />
       <a
         href={enabled ? downloadHref : undefined}
-        download={enabled ? `${title.toLowerCase().replaceAll(" ", "_")}.mp3` : undefined}
+        download={enabled ? `${title.toLowerCase().replaceAll(" ", "_")}.wav` : undefined}
         aria-disabled={!enabled}
         className={`mt-3 flex h-10 items-center justify-center gap-2 rounded border px-3 text-sm font-semibold ${
           enabled

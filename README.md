@@ -40,7 +40,7 @@ http://localhost:3000
 如果线上前端域名已确定，在 Render 环境变量中配置：
 
 ```env
-CORS_ORIGINS=http://localhost:3000,https://your-vercel-app.vercel.app
+CORS_ORIGINS=http://localhost:3000,https://fengye-rain.life,https://www.fengye-rain.life
 ```
 
 Vercel 前端环境变量配置为 Render 后端地址：
@@ -51,9 +51,9 @@ NEXT_PUBLIC_API_BASE_URL=https://your-audio-backend.onrender.com
 
 ## API 流程
 
-上传流程是：选择音频文件，前端 `POST` 到后端 `/api/jobs?mode=fast|quality`，拿到 `jobId` 后每 2 秒轮询 `/api/jobs/{jobId}`，状态变成 `completed` 后展示 vocals 和 instrumental 的试听与下载入口。
+上传流程是：选择音频文件，前端 `POST` 到后端 `/api/jobs?mode=fast|quality`，拿到 `jobId` 后每 2 秒轮询 `/api/jobs/{jobId}`，状态变成 `completed` 后展示 vocals、instrumental、guitar 和 no guitar 的试听与下载入口。
 
-后端接口包括 `GET /health`、`POST /api/jobs`、`GET /api/jobs/{job_id}`、`GET /api/jobs/{job_id}/download/vocals` 和 `GET /api/jobs/{job_id}/download/instrumental`。所有临时文件写入 `/tmp/audio-jobs/`，第一版使用内存字典维护任务状态。
+后端接口包括 `GET /health`、`POST /api/jobs`、`GET /api/jobs/{job_id}`、`GET /api/jobs/{job_id}/download/vocals`、`GET /api/jobs/{job_id}/download/instrumental`、`GET /api/jobs/{job_id}/download/guitar` 和 `GET /api/jobs/{job_id}/download/no_guitar`。所有临时文件写入 `/tmp/audio-jobs/`，第一版使用内存字典维护任务状态。
 
 ## 验证
 

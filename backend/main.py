@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Literal
@@ -43,7 +44,7 @@ def health() -> dict[str, bool | str]:
         "ffmpeg": executable_exists("ffmpeg"),
         "ffprobe": executable_exists("ffprobe"),
         "python": Path(sys.executable).exists(),
-        "demucs": executable_exists("demucs"),
+        "demucs": executable_exists("demucs") or python_module_exists("demucs"),
     }
 
 
@@ -91,6 +92,8 @@ def get_job(job_id: str) -> dict[str, object]:
         payload["outputs"] = {
             "vocals": f"/api/jobs/{job_id}/download/vocals",
             "instrumental": f"/api/jobs/{job_id}/download/instrumental",
+            "guitar": f"/api/jobs/{job_id}/download/guitar",
+            "no_guitar": f"/api/jobs/{job_id}/download/no_guitar",
         }
     return payload
 
@@ -103,6 +106,16 @@ def download_vocals(job_id: str) -> FileResponse:
 @app.get("/api/jobs/{job_id}/download/instrumental")
 def download_instrumental(job_id: str) -> FileResponse:
     return download_result(job_id, "instrumental.wav")
+
+
+@app.get("/api/jobs/{job_id}/download/guitar")
+def download_guitar(job_id: str) -> FileResponse:
+    return download_result(job_id, "guitar.wav")
+
+
+@app.get("/api/jobs/{job_id}/download/no_guitar")
+def download_no_guitar(job_id: str) -> FileResponse:
+    return download_result(job_id, "no_guitar.wav")
 
 
 def download_result(job_id: str, filename: str) -> FileResponse:
@@ -144,3 +157,13 @@ async def save_upload(file: UploadFile, destination: Path) -> int:
 
 def executable_exists(name: str) -> bool:
     return shutil.which(name) is not None
+
+
+def python_module_exists(name: str) -> bool:
+    completed = subprocess.run(
+        [sys.executable, "-c", f"import {name}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return completed.returncode == 0

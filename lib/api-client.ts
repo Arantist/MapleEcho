@@ -76,7 +76,9 @@ export function mapBackendJob(
     error: payload.status === "failed" ? payload.message : undefined,
     files: {
       vocals: payload.outputs?.vocals ? buildApiUrl(baseUrl, payload.outputs.vocals) : undefined,
-      instrumental: payload.outputs?.instrumental ? buildApiUrl(baseUrl, payload.outputs.instrumental) : undefined
+      instrumental: payload.outputs?.instrumental ? buildApiUrl(baseUrl, payload.outputs.instrumental) : undefined,
+      guitar: payload.outputs?.guitar ? buildApiUrl(baseUrl, payload.outputs.guitar) : undefined,
+      no_guitar: payload.outputs?.no_guitar ? buildApiUrl(baseUrl, payload.outputs.no_guitar) : undefined
     },
     createdAt: now,
     updatedAt: now
