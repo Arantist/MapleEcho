@@ -18,7 +18,8 @@ import {
   API_UNAVAILABLE_ERROR,
   createBackendJob,
   fetchBackendHealth,
-  fetchBackendJob
+  fetchBackendJob,
+  getApiBaseUrl
 } from "@/lib/api-client";
 import { clampPlaybackTime, formatPlaybackTime, progressPercent } from "@/lib/player";
 import type { BackendHealth, JobMode, JobRecord } from "@/lib/types";
@@ -31,7 +32,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+  const apiBaseUrl = getApiBaseUrl();
   const hasApiBaseUrl = apiBaseUrl.trim().length > 0;
 
   const isBusy = uploading || job?.status === "queued" || job?.status === "running";
@@ -110,7 +111,7 @@ export default function Home() {
             <span className="h-1 w-1 rounded-full bg-[#b9b6ad]" />
             <span>后端处理</span>
             <span className="h-1 w-1 rounded-full bg-[#b9b6ad]" />
-            <span>Render 服务</span>
+            <span>Google Cloud</span>
           </div>
         </div>
       </header>
@@ -125,7 +126,7 @@ export default function Home() {
                   上传音频，分离伴奏、人声和吉他
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-[#66635d]">
-                  选择一个音频文件，Render 后端调用 Demucs 6-stem 模型生成 vocals、instrumental、guitar 和 no guitar。
+                  选择一个音频文件，Google Cloud 后端调用 Demucs 6-stem 模型生成 vocals、instrumental、guitar 和 no guitar。
                 </p>
               </div>
               <div className="hidden rounded border border-[#ddd6c6] bg-[#faf9f6] px-3 py-2 text-xs font-semibold text-[#6f6248] shadow-sm sm:block">

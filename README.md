@@ -1,8 +1,8 @@
 # 伴奏分离工作台
 
-这是一个前后端分离的音频分离 Web App。前端保留在当前 Next.js 项目中，可以部署到 Vercel；后端放在 `backend/`，使用 FastAPI + Docker 部署到 Render Web Service。Python、ffmpeg、Demucs 和 torch 都只在 Render 后端容器里运行，Vercel 只负责页面、上传入口、任务状态展示、音频试听和下载按钮。
+这是一个前后端分离的音频分离 Web App。前端保留在当前 Next.js 项目中，部署到 Vercel；后端放在 `backend/`，使用 FastAPI + Demucs 部署到 Google Cloud VM。Python、ffmpeg、Demucs 和 torch 都只在 Google Cloud 后端运行，Vercel 负责页面、上传入口、任务状态展示、音频试听和下载按钮。
 
-前端通过 `NEXT_PUBLIC_API_BASE_URL` 调用后端。本地开发时前端跑 `http://localhost:3000`，后端跑 `http://localhost:8000`。
+前端通过 HTTP API 调用后端。本地开发时前端跑 `http://localhost:3000`，后端跑 `http://localhost:8000`。线上默认走 Vercel rewrite：`/api/backend/*` 转发到 Google Cloud VM。
 
 ## 启动后端
 
@@ -33,21 +33,31 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 http://localhost:3000
 ```
 
-## Render 部署
+## Google Cloud 部署
 
-在 Render 创建 Docker Web Service，根目录选择 `backend`。服务必须监听 `0.0.0.0` 和环境变量 `PORT`，当前 Dockerfile 的启动命令已经处理：没有 `PORT` 时默认使用 `10000`。
+当前 Google Cloud VM：
 
-如果线上前端域名已确定，在 Render 环境变量中配置：
+```text
+demucs-backend
+asia-northeast1-a
+136.110.67.247
+```
+
+后端部署到 `/opt/mapleecho-backend`，systemd 服务名是 `mapleecho-backend`，uvicorn 监听 `127.0.0.1:8000`，nginx 监听公网 80 并反代到后端。
+
+后端 CORS：
 
 ```env
 CORS_ORIGINS=http://localhost:3000,https://fengye-rain.life,https://www.fengye-rain.life
 ```
 
-Vercel 前端环境变量配置为 Render 后端地址：
+Vercel 前端默认不需要配置 `NEXT_PUBLIC_API_BASE_URL`。`next.config.ts` 已经把 `/api/backend/:path*` rewrite 到：
 
-```env
-NEXT_PUBLIC_API_BASE_URL=https://your-audio-backend.onrender.com
+```text
+http://136.110.67.247/:path*
 ```
+
+如果后续配置 `api.fengye-rain.life` 和 HTTPS，可以把 `NEXT_PUBLIC_API_BASE_URL` 设置成 `https://api.fengye-rain.life`，或者把 rewrite 目标改成这个 HTTPS API。
 
 ## API 流程
 
@@ -60,4 +70,5 @@ NEXT_PUBLIC_API_BASE_URL=https://your-audio-backend.onrender.com
 ```bash
 npm test
 npm run build
+npm run check
 ```

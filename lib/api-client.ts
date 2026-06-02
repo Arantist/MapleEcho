@@ -1,10 +1,14 @@
 import type { BackendHealth, BackendJobMode, BackendJobResponse, JobMode, JobRecord, JobStatus } from "@/lib/types";
 
 export const API_CONFIGURATION_ERROR = "请先配置 NEXT_PUBLIC_API_BASE_URL。";
-export const API_UNAVAILABLE_ERROR = "后端服务不可用，请检查 Render 服务是否启动或环境变量是否配置正确。";
+export const API_UNAVAILABLE_ERROR = "后端服务不可用，请检查 Google Cloud 后端是否启动。";
+
+export function getApiBaseUrl(value = process.env.NEXT_PUBLIC_API_BASE_URL) {
+  return value?.trim() || "/api/backend";
+}
 
 export function requireApiBaseUrl(value = process.env.NEXT_PUBLIC_API_BASE_URL) {
-  const trimmed = value?.trim();
+  const trimmed = getApiBaseUrl(value);
   if (!trimmed) {
     throw new Error(API_CONFIGURATION_ERROR);
   }

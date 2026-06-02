@@ -1,21 +1,21 @@
 import { describe, expect, test } from "vitest";
 import {
-  API_CONFIGURATION_ERROR,
   buildApiUrl,
+  getApiBaseUrl,
   mapBackendJob,
   modeToBackendMode,
   requireApiBaseUrl
 } from "@/lib/api-client";
 
 describe("api client", () => {
-  test("requires NEXT_PUBLIC_API_BASE_URL", () => {
-    expect(() => requireApiBaseUrl("")).toThrow(API_CONFIGURATION_ERROR);
-    expect(() => requireApiBaseUrl(undefined)).toThrow(API_CONFIGURATION_ERROR);
+  test("defaults to the Vercel backend rewrite", () => {
+    expect(getApiBaseUrl("")).toBe("/api/backend");
+    expect(requireApiBaseUrl(undefined)).toBe("/api/backend");
   });
 
   test("normalizes backend URLs without duplicate slashes", () => {
-    expect(buildApiUrl("https://audio-backend.onrender.com/", "/api/jobs/abc")).toBe(
-      "https://audio-backend.onrender.com/api/jobs/abc"
+    expect(buildApiUrl("https://api.fengye-rain.life/", "/api/jobs/abc")).toBe(
+      "https://api.fengye-rain.life/api/jobs/abc"
     );
   });
 
@@ -39,7 +39,7 @@ describe("api client", () => {
             no_guitar: "/api/jobs/job-1/download/no_guitar"
           }
         },
-        "https://audio-backend.onrender.com"
+        "https://api.fengye-rain.life"
       )
     ).toMatchObject({
       id: "job-1",
@@ -47,10 +47,10 @@ describe("api client", () => {
       progress: 42,
       message: "Separating",
       files: {
-        vocals: "https://audio-backend.onrender.com/api/jobs/job-1/download/vocals",
-        instrumental: "https://audio-backend.onrender.com/api/jobs/job-1/download/instrumental",
-        guitar: "https://audio-backend.onrender.com/api/jobs/job-1/download/guitar",
-        no_guitar: "https://audio-backend.onrender.com/api/jobs/job-1/download/no_guitar"
+        vocals: "https://api.fengye-rain.life/api/jobs/job-1/download/vocals",
+        instrumental: "https://api.fengye-rain.life/api/jobs/job-1/download/instrumental",
+        guitar: "https://api.fengye-rain.life/api/jobs/job-1/download/guitar",
+        no_guitar: "https://api.fengye-rain.life/api/jobs/job-1/download/no_guitar"
       }
     });
   });
