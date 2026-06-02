@@ -239,6 +239,12 @@ export default function Home() {
           </div>
         </div>
       </section>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed bottom-3 right-3 z-50 rounded border border-[#d8d3c7] bg-white/78 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#756d5f] shadow-sm backdrop-blur"
+      >
+        From Arain
+      </div>
     </main>
   );
 }
