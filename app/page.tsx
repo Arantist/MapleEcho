@@ -1,137 +1,210 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
   Download,
-  Gauge,
+  FileAudio,
   Loader2,
   Music2,
   Pause,
   Play,
   SlidersHorizontal,
+  Sparkles,
   Upload
 } from "lucide-react";
 import {
   API_CONFIGURATION_ERROR,
   API_UNAVAILABLE_ERROR,
   createBackendJob,
-  fetchBackendHealth,
   fetchBackendJob,
   getApiBaseUrl
 } from "@/lib/api-client";
 import { clampPlaybackTime, formatPlaybackTime, progressPercent } from "@/lib/player";
-import type { BackendHealth, JobMode, JobRecord } from "@/lib/types";
+import type { JobMode, JobRecord, TargetStem } from "@/lib/types";
+
+type UiMode = "standard" | "quality";
+
+type TargetOption = {
+  value: TargetStem;
+  label: string;
+  output: string;
+};
+
+type ModeOption = {
+  value: UiMode;
+  label: string;
+  description: string;
+  badge?: string;
+};
+
+type ResultState = {
+  isolatedUrl: string;
+  backingUrl: string;
+  isolatedLabel: string;
+  backingLabel: string;
+  targetLabel: string;
+};
+
+const TARGET_OPTIONS: TargetOption[] = [
+  { value: "guitar", label: "电吉他 / 原声吉他", output: "输出 guitar 和 no_guitar" },
+  { value: "bass", label: "贝斯", output: "输出 bass 和 no_bass" },
+  { value: "drums", label: "鼓点", output: "输出 drums 和 no_drums" },
+  { value: "vocals", label: "人声", output: "输出 vocals 和 no_vocals" }
+];
+
+const MODE_OPTIONS: ModeOption[] = [
+  { value: "standard", label: "标准模式", description: "MP3 256kbps，速度和质量平衡" },
+  { value: "quality", label: "质量模式", description: "MP3 320kbps，双次 shift 平均，分离度更好", badge: "推荐质量" }
+];
 
 export default function Home() {
-  const [mode, setMode] = useState<JobMode>("speed");
-  const [file, setFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<TargetStem>("guitar");
+  const [selectedMode, setSelectedMode] = useState<UiMode>("standard");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [statusText, setStatusText] = useState("等待上传");
+  const [result, setResult] = useState<ResultState | null>(null);
   const [job, setJob] = useState<JobRecord | null>(null);
-  const [system, setSystem] = useState<BackendHealth | null>(null);
   const [error, setError] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [practiceNotice, setPracticeNotice] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const apiBaseUrl = getApiBaseUrl();
   const hasApiBaseUrl = apiBaseUrl.trim().length > 0;
 
-  const isBusy = uploading || job?.status === "queued" || job?.status === "running";
-  const resultReady = job?.status === "completed";
+  const selectedTargetLabel = useMemo(
+    () => TARGET_OPTIONS.find((option) => option.value === selectedTarget)?.label ?? "目标轨道",
+    [selectedTarget]
+  );
+  const showResultDetail = Boolean(job || result || isProcessing);
+  const canSubmit = Boolean(selectedFile) && !isProcessing;
+  const progress = job?.progress ?? (isProcessing ? 8 : 0);
 
-  useEffect(() => {
-    if (!hasApiBaseUrl) {
-      setError(API_CONFIGURATION_ERROR);
+  const applyJobUpdate = useCallback((nextJob: JobRecord) => {
+    setJob(nextJob);
+
+    if (nextJob.status === "queued") {
+      setIsProcessing(true);
+      setStatusText("后端处理中");
       return;
     }
-    fetchBackendHealth(apiBaseUrl)
-      .then(setSystem)
-      .catch(() => {
-        setSystem(null);
-        setError(API_UNAVAILABLE_ERROR);
-      });
-  }, [apiBaseUrl, hasApiBaseUrl]);
+
+    if (nextJob.status === "running") {
+      setIsProcessing(true);
+      setStatusText(nextJob.message || "后端处理中");
+      return;
+    }
+
+    if (nextJob.status === "completed") {
+      setIsProcessing(false);
+      setStatusText("分离完成");
+      setResult(buildResultState(nextJob, selectedTargetLabel));
+      return;
+    }
+
+    setIsProcessing(false);
+    setStatusText("出错");
+  }, [selectedTargetLabel]);
 
   useEffect(() => {
     if (!job || job.status === "completed" || job.status === "failed") return;
+
     const timer = window.setInterval(async () => {
       try {
-        setJob(await fetchBackendJob(job.id, apiBaseUrl));
+        const nextJob = await fetchBackendJob(job.id, apiBaseUrl);
+        applyJobUpdate(nextJob);
       } catch {
+        setIsProcessing(false);
         setError(API_UNAVAILABLE_ERROR);
+        setStatusText("出错");
       }
     }, 2000);
-    return () => window.clearInterval(timer);
-  }, [apiBaseUrl, job]);
 
-  const statusText = useMemo(() => {
-    if (!job) return "等待上传";
-    if (job.status === "queued") return "排队中";
-    if (job.status === "running") return "分离中";
-    if (job.status === "completed") return "已完成";
-    return "处理失败";
-  }, [job]);
+    return () => window.clearInterval(timer);
+  }, [apiBaseUrl, applyJobUpdate, job]);
+
+  function handleFileChange(nextFile: File | null) {
+    setSelectedFile(nextFile);
+    setError("");
+    setResult(null);
+    setJob(null);
+    setStatusText(nextFile ? "已选择文件" : "等待上传");
+  }
 
   async function submit() {
-    if (!file) {
+    if (!selectedFile) {
       setError("请先选择一个音频文件。");
+      setStatusText("等待上传");
       return;
     }
+
     if (!hasApiBaseUrl) {
       setError(API_CONFIGURATION_ERROR);
+      setStatusText("出错");
       return;
     }
-    setUploading(true);
+
+    setIsProcessing(true);
+    setStatusText("正在上传");
     setError("");
+    setResult(null);
     setJob(null);
 
     try {
-      setJob(await createBackendJob({ file, mode, baseUrl: apiBaseUrl }));
-    } catch (error) {
-      setError(error instanceof Error ? error.message : API_UNAVAILABLE_ERROR);
-    } finally {
-      setUploading(false);
+      const backendMode = uiModeToJobMode(selectedMode);
+      const createdJob = await createBackendJob({
+        file: selectedFile,
+        mode: backendMode,
+        target: selectedTarget,
+        baseUrl: apiBaseUrl
+      });
+      applyJobUpdate(createdJob);
+    } catch (caughtError) {
+      setIsProcessing(false);
+      setStatusText("出错");
+      setError(caughtError instanceof Error ? caughtError.message : API_UNAVAILABLE_ERROR);
     }
   }
 
+  function handlePracticeClick(label: string) {
+    setPracticeNotice(`${label} 功能开发中`);
+  }
+
   return (
-    <main className="min-h-screen bg-[#f6f6f4] text-[#171717]">
-      <header className="border-b border-[#deded8] bg-white/95 text-[#171717] shadow-[0_1px_0_rgba(255,255,255,0.9)]">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded border border-[#d7d0be] bg-[#f8f7f3] text-[#2a2926] shadow-sm">
-              <Music2 size={20} />
+    <main className="min-h-screen bg-[linear-gradient(135deg,#f7f6f2_0%,#efeee8_48%,#f8f8f6_100%)] text-[#171717]">
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-[#dedbd2]/80 bg-white/78 shadow-[0_8px_30px_rgba(42,39,32,0.06)] backdrop-blur-xl">
+        <div className="mx-auto flex h-18 max-w-[1280px] items-center justify-between px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#d7d0be] bg-[#fbfaf7] text-[#24231f] shadow-sm">
+              <Music2 size={21} />
             </div>
-            <div>
-              <div className="text-base font-semibold tracking-[0.08em]">忆枫MapleEcho</div>
-              <div className="text-xs text-[#73716c]">再也不用付费做伴奏啦～</div>
+            <div className="min-w-0">
+              <div className="truncate text-base font-semibold text-[#20201d]">忆枫 MapleEcho</div>
+              <div className="truncate text-xs text-[#77736a]">再也不用付费做伴奏啦～</div>
             </div>
           </div>
-          <div className="hidden items-center gap-2 text-sm text-[#5d5b56] sm:flex">
+          <div className="hidden items-center gap-2 text-sm text-[#666259] sm:flex">
             <span>单文件</span>
-            <span className="h-1 w-1 rounded-full bg-[#b9b6ad]" />
+            <span className="h-1 w-1 rounded-full bg-[#bbb7ac]" />
             <span>后端处理</span>
-            <span className="h-1 w-1 rounded-full bg-[#b9b6ad]" />
+            <span className="h-1 w-1 rounded-full bg-[#bbb7ac]" />
             <span>Google Cloud</span>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-7 lg:grid-cols-[minmax(420px,0.9fr)_minmax(620px,1.1fr)]">
-        <div className="space-y-5">
-          <div className="rounded-lg border border-[#deded8] bg-white p-5 shadow-[0_18px_50px_rgba(31,31,29,0.07)] sm:p-6">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#8b806c]">Local Stem Studio</div>
-                <h1 className="max-w-2xl text-2xl font-semibold leading-tight tracking-normal text-[#151515] sm:text-3xl">
-                  上传音频，分离伴奏、人声和吉他
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-[#66635d]">
-                  选择一个音频文件，Google Cloud 后端调用 Demucs 6-stem 模型生成 vocals、instrumental、guitar 和 no guitar。
-                </p>
-              </div>
-              <div className="hidden rounded border border-[#ddd6c6] bg-[#faf9f6] px-3 py-2 text-xs font-semibold text-[#6f6248] shadow-sm sm:block">
-                100MB 内
-              </div>
+      <section className="mx-auto grid max-w-[1280px] grid-cols-[minmax(0,1fr)] gap-5 px-4 pb-10 pt-24 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(390px,1fr)]">
+        <div className="min-w-0 space-y-5">
+          <Card className="p-5 sm:p-7">
+            <div className="mb-6">
+              <SectionLabel>UPLOAD / 上传音频</SectionLabel>
+              <h1 className="mt-3 max-w-full break-all text-2xl font-semibold leading-tight text-[#151515] sm:text-3xl">
+                上传音频，分离目标轨道和练习伴奏
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-[#69655d] sm:text-base">
+                选择目标轨道，Google Cloud 后端只返回目标轨道和去目标伴奏，默认使用 MP3。
+              </p>
             </div>
 
             <input
@@ -139,174 +212,288 @@ export default function Home() {
               className="hidden"
               type="file"
               accept=".mp3,.wav,.flac,.m4a,.aac,.ogg,audio/*"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
             />
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="flex min-h-44 w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[#bdbbb3] bg-[#f9f9f7] px-4 py-7 text-center transition hover:border-[#79766d] hover:bg-white"
+              className="group flex min-h-40 w-full min-w-0 flex-col justify-between rounded-2xl border border-dashed border-[#beb9ad] bg-[#faf9f5] p-5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#24231f] hover:bg-white hover:shadow-[0_16px_38px_rgba(42,39,32,0.08)] sm:flex-row sm:items-center sm:gap-5"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-full border border-[#d8d5cc] bg-white text-[#292826] shadow-sm">
-                <Upload size={24} />
+              <span className="flex items-center gap-4">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[#d8d4c9] bg-white text-[#25241f] shadow-sm transition group-hover:border-[#24231f]">
+                  {selectedFile ? <FileAudio size={24} /> : <Upload size={24} />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block max-w-full break-all text-lg font-semibold text-[#20201d]">
+                    {selectedFile ? selectedFile.name : "选择音频文件"}
+                  </span>
+                  <span className="mt-1 block text-sm leading-6 text-[#77736b]">
+                    mp3、wav、flac、m4a、aac、ogg
+                  </span>
+                  {selectedFile ? (
+                    <span className="mt-2 block text-sm text-[#5d594f]">
+                      {formatFileSize(selectedFile.size)} · 已选择文件
+                    </span>
+                  ) : null}
+                </span>
               </span>
-              <span className="max-w-full break-all text-base font-semibold text-[#1f1f1d]">{file ? file.name : "选择音频文件"}</span>
-              <span className="text-sm text-[#77746d]">mp3、wav、flac、m4a、aac、ogg</span>
+              <span className="mt-5 inline-flex w-fit rounded-xl border border-[#ddd6c6] bg-white px-4 py-2 text-sm font-semibold text-[#6f6248] shadow-sm sm:mt-0">
+                100MB 内
+              </span>
             </button>
+          </Card>
 
-            <div className="mt-5 grid gap-2 rounded-lg border border-[#deded8] bg-[#f4f4f1] p-1 sm:grid-cols-2">
-              <ModeButton
-                active={mode === "speed"}
-                title="速度模式"
-                body="使用 htdemucs_6s，单次预测。"
-                onClick={() => setMode("speed")}
-              />
-              <ModeButton
-                active={mode === "quality"}
-                title="质量模式"
-                body="使用 htdemucs_6s，双次 shift 平均。"
-                onClick={() => setMode("quality")}
-              />
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4">
+              <SectionLabel>TARGET / 选择目标轨道</SectionLabel>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {TARGET_OPTIONS.map((option) => (
+                <TargetButton
+                  key={option.value}
+                  active={selectedTarget === option.value}
+                  option={option}
+                  onClick={() => setSelectedTarget(option.value)}
+                />
+              ))}
+            </div>
+          </Card>
 
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4">
+              <SectionLabel>MODE / 处理模式</SectionLabel>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {MODE_OPTIONS.map((option) => (
+                <ModeButton
+                  key={option.value}
+                  active={selectedMode === option.value}
+                  option={option}
+                  onClick={() => setSelectedMode(option.value)}
+                />
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
             <button
               type="button"
-              disabled={isBusy}
+              disabled={!canSubmit}
               onClick={submit}
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded bg-[#191918] px-4 font-semibold text-white shadow-[0_12px_24px_rgba(25,25,24,0.18)] transition hover:bg-[#30302d] disabled:cursor-not-allowed disabled:bg-[#e2e2dc] disabled:text-[#8a887f] disabled:shadow-none"
+              className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#191918] px-5 text-base font-semibold text-white shadow-[0_18px_35px_rgba(25,25,24,0.18)] transition hover:-translate-y-0.5 hover:bg-[#2d2c29] disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-[#deddd6] disabled:text-[#9b978e] disabled:shadow-none"
             >
-              {isBusy ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} />}
-              开始分离
+              {isProcessing ? <Loader2 className="animate-spin" size={19} /> : <Play size={19} fill="currentColor" />}
+              {isProcessing ? "正在分离..." : "开始分离"}
             </button>
+            <StatusBar statusText={statusText} progress={progress} isProcessing={isProcessing} />
             {error ? <Message tone="error" text={error} /> : null}
             {job?.warning ? <Message tone="warning" text={job.warning} /> : null}
             {job?.status === "failed" && job.error ? <Message tone="error" text={job.error} /> : null}
-          </div>
+          </Card>
+        </div>
 
-          <div className="rounded-lg border border-[#deded8] bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 font-semibold text-[#1d1d1b]">
-                <Gauge size={18} />
-                任务状态
+        <aside className="min-w-0 space-y-5 lg:sticky lg:top-24">
+          <Card className="overflow-hidden p-5 sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <SectionLabel>RESULT / 分离结果</SectionLabel>
+                <h2 className="mt-3 text-2xl font-semibold text-[#181817]">分离结果</h2>
               </div>
-              <span className="rounded border border-[#262622] bg-[#191918] px-3 py-1 text-xs font-semibold text-white">{statusText}</span>
+              {result ? <CheckCircle2 className="mt-1 text-[#6f6248]" size={24} /> : <Sparkles className="mt-1 text-[#aaa398]" size={24} />}
             </div>
-            <div className="h-2 overflow-hidden rounded bg-[#e4e4df]">
-              <div
-                className="h-full rounded bg-[#81755d] transition-all"
-                style={{ width: `${job?.progress ?? 0}%` }}
-              />
-            </div>
-            <div className="mt-3 text-sm text-[#706d66]">
-              {job ? job.message || `任务 ID：${job.id}` : "完成后会在这里显示试听和下载入口。"}
-            </div>
-          </div>
-        </div>
 
-        <div className="order-first space-y-4 lg:order-none">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <ResultPanel
-              title="Instrumental"
-              subtitle="无人声伴奏"
-              enabled={Boolean(resultReady && job.files?.instrumental)}
-              src={resultReady ? job.files?.instrumental ?? "" : ""}
-              downloadHref={resultReady ? job.files?.instrumental ?? "" : ""}
-            />
-            <ResultPanel
-              title="Vocals"
-              subtitle="人声"
-              enabled={Boolean(resultReady && job.files?.vocals)}
-              src={resultReady ? job.files?.vocals ?? "" : ""}
-              downloadHref={resultReady ? job.files?.vocals ?? "" : ""}
-            />
-            <ResultPanel
-              title="Guitar"
-              subtitle="吉他"
-              enabled={Boolean(resultReady && job.files?.guitar)}
-              src={resultReady ? job.files?.guitar ?? "" : ""}
-              downloadHref={resultReady ? job.files?.guitar ?? "" : ""}
-            />
-            <ResultPanel
-              title="No Guitar"
-              subtitle="无吉他版本"
-              enabled={Boolean(resultReady && job.files?.no_guitar)}
-              src={resultReady ? job.files?.no_guitar ?? "" : ""}
-              downloadHref={resultReady ? job.files?.no_guitar ?? "" : ""}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <PracticePanel />
-            <SystemPanel system={system} />
-          </div>
-        </div>
+            {!showResultDetail ? (
+              <div className="rounded-2xl border border-dashed border-[#d7d3c8] bg-[#f8f7f3] px-5 py-12 text-center text-sm leading-7 text-[#77736a]">
+                上传音频并开始分离后，目标轨道和练习伴奏会显示在这里。
+              </div>
+            ) : (
+              <div className="overflow-hidden transition-all duration-500 ease-out">
+                <div className="animate-[resultReveal_420ms_ease-out] space-y-4">
+                  {result ? (
+                    <>
+                      <ResultPanel
+                        title={`目标轨道：${result.targetLabel}`}
+                        subtitle={result.isolatedLabel}
+                        src={result.isolatedUrl}
+                        downloadHref={result.isolatedUrl}
+                        downloadLabel="下载目标轨道"
+                      />
+                      <ResultPanel
+                        title="去目标伴奏"
+                        subtitle={result.backingLabel}
+                        src={result.backingUrl}
+                        downloadHref={result.backingUrl}
+                        downloadLabel="下载去目标伴奏"
+                      />
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-[#e5e1d7] bg-[#faf9f5] px-5 py-10 text-center">
+                      <Loader2 className="mx-auto mb-3 animate-spin text-[#6f6248]" size={24} />
+                      <div className="font-semibold text-[#24231f]">正在生成结果</div>
+                      <div className="mt-2 text-sm leading-6 text-[#77736b]">
+                        后端处理完成后，目标轨道和去目标伴奏会在这里展开。
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex items-center gap-2">
+              <SlidersHorizontal size={18} className="text-[#5e594f]" />
+              <div>
+                <SectionLabel>PRACTICE / 练习模式</SectionLabel>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {["AB Loop", "变速", "变调"].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => handlePracticeClick(label)}
+                  className="h-11 rounded-xl border border-[#d9d5cb] bg-[#faf9f5] text-sm font-semibold text-[#5d594f] transition hover:-translate-y-0.5 hover:border-[#24231f] hover:bg-white"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 min-h-6 text-sm text-[#77736b]">{practiceNotice}</div>
+          </Card>
+        </aside>
       </section>
+
       <div
         aria-hidden="true"
         className="pointer-events-none fixed bottom-3 right-3 z-50 rounded border border-[#d8d3c7] bg-white/78 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#756d5f] shadow-sm backdrop-blur"
       >
         From Arain
       </div>
+      <style jsx global>{`
+        @keyframes resultReveal {
+          from {
+            opacity: 0;
+            transform: translateY(14px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </main>
   );
 }
 
-function ModeButton({ active, title, body, onClick }: { active: boolean; title: string; body: string; onClick: () => void }) {
+function Card({ className = "", children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <section className={`w-full min-w-0 rounded-2xl border border-[#dedbd2] bg-white/88 shadow-[0_18px_50px_rgba(42,39,32,0.07)] backdrop-blur ${className}`}>
+      {children}
+    </section>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8a806e]">{children}</div>;
+}
+
+function TargetButton({ active, option, onClick }: { active: boolean; option: TargetOption; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded border p-4 text-left transition ${
+      className={`min-h-28 min-w-0 rounded-2xl border p-4 text-left transition duration-200 hover:-translate-y-0.5 ${
         active
-          ? "border-[#242421] bg-white text-[#171717] shadow-sm"
-          : "border-transparent bg-transparent text-[#5f5d57] hover:border-[#d8d8d2] hover:bg-white/70"
+          ? "border-[#22211e] bg-[#fffdf7] shadow-[0_12px_26px_rgba(42,39,32,0.10)]"
+          : "border-[#e3dfd5] bg-[#faf9f5] hover:border-[#8f8779] hover:bg-white"
       }`}
     >
-      <div className="font-semibold">{title}</div>
-      <div className={`mt-1 text-sm ${active ? "text-[#66635d]" : "text-[#85827a]"}`}>{body}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-base font-semibold text-[#20201d]">{option.label}</div>
+        <span
+          className={`mt-1 h-3 w-3 shrink-0 rounded-full border ${
+            active ? "border-[#22211e] bg-[#22211e]" : "border-[#bcb6aa] bg-white"
+          }`}
+        />
+      </div>
+      <div className="mt-3 text-sm leading-6 text-[#77736b]">{option.output}</div>
     </button>
+  );
+}
+
+function ModeButton({ active, option, onClick }: { active: boolean; option: ModeOption; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-28 min-w-0 rounded-2xl border p-4 text-left transition duration-200 hover:-translate-y-0.5 ${
+        active
+          ? "border-[#22211e] bg-[#fffdf7] shadow-[0_12px_26px_rgba(42,39,32,0.10)]"
+          : "border-[#e3dfd5] bg-[#faf9f5] hover:border-[#8f8779] hover:bg-white"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="text-base font-semibold text-[#20201d]">{option.label}</div>
+        {option.badge ? (
+          <span className="rounded-full bg-[#efe7d5] px-2 py-0.5 text-xs font-semibold text-[#6f6248]">{option.badge}</span>
+        ) : null}
+      </div>
+      <div className="mt-3 text-sm leading-6 text-[#77736b]">{option.description}</div>
+    </button>
+  );
+}
+
+function StatusBar({ statusText, progress, isProcessing }: { statusText: string; progress: number; isProcessing: boolean }) {
+  return (
+    <div className="mt-4 rounded-2xl border border-[#e2ded4] bg-[#faf9f5] p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="text-sm font-semibold text-[#2b2a26]">{statusText}</div>
+        <div className="text-xs font-medium text-[#77736b]">{Math.round(progress)}%</div>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e5e1d8]">
+        <div
+          className={`h-full rounded-full bg-[#6f6248] transition-all duration-500 ${isProcessing ? "animate-pulse" : ""}`}
+          style={{ width: `${Math.max(0, Math.min(progress, 100))}%` }}
+        />
+      </div>
+    </div>
   );
 }
 
 function ResultPanel({
   title,
   subtitle,
-  enabled,
   src,
-  downloadHref
+  downloadHref,
+  downloadLabel
 }: {
   title: string;
   subtitle: string;
-  enabled: boolean;
   src: string;
   downloadHref: string;
+  downloadLabel: string;
 }) {
   return (
-    <div className="rounded-lg border border-[#deded8] bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a857b]">{subtitle}</div>
-          <div className="text-lg font-semibold text-[#171717]">{title}</div>
-        </div>
-        {enabled ? <CheckCircle2 className="text-[#81755d]" size={22} /> : <Pause className="text-[#aaa69d]" size={22} />}
+    <div className="rounded-2xl border border-[#e1ddd3] bg-[#fbfaf7] p-4 shadow-sm">
+      <div className="mb-4">
+        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8a806e]">{subtitle}</div>
+        <div className="mt-2 text-lg font-semibold text-[#181817]">{title}</div>
       </div>
-      <AudioPlayer enabled={enabled} src={src} label={title} />
+      <AudioPlayer src={src} label={title} />
       <a
-        href={enabled ? downloadHref : undefined}
-        download={enabled ? `${title.toLowerCase().replaceAll(" ", "_")}.wav` : undefined}
-        aria-disabled={!enabled}
-        className={`mt-3 flex h-10 items-center justify-center gap-2 rounded border px-3 text-sm font-semibold ${
-          enabled
-            ? "border-[#191918] bg-[#191918] text-white hover:bg-[#30302d]"
-            : "pointer-events-none border-[#deded8] bg-[#f2f2ef] text-[#aaa69d]"
-        }`}
+        href={downloadHref}
+        download={`${subtitle.toLowerCase().replaceAll(" ", "_")}.mp3`}
+        className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#191918] bg-[#191918] px-4 text-sm font-semibold text-white transition hover:bg-[#30302d]"
       >
         <Download size={17} />
-        下载 {title}
+        {downloadLabel}
       </a>
     </div>
   );
 }
 
-function AudioPlayer({ enabled, src, label }: { enabled: boolean; src: string; label: string }) {
+function AudioPlayer({ src, label }: { src: string; label: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -314,28 +501,30 @@ function AudioPlayer({ enabled, src, label }: { enabled: boolean; src: string; l
 
   useEffect(() => {
     const audio = audioRef.current;
-    setCurrentTime(0);
-    setDuration(0);
-    setPlaying(false);
     if (!audio) return;
 
-    audio.pause();
-    audio.currentTime = 0;
-    if (enabled && src) {
+    const resetTimer = window.setTimeout(() => {
+      setCurrentTime(0);
+      setDuration(0);
+      setPlaying(false);
+      audio.pause();
+      audio.currentTime = 0;
       audio.load();
-      const timer = window.setTimeout(() => readAudioDuration(audio, setDuration), 200);
-      return () => window.clearTimeout(timer);
-    }
-  }, [enabled, src]);
+    }, 0);
+    const durationTimer = window.setTimeout(() => readAudioDuration(audio, setDuration), 200);
+    return () => {
+      window.clearTimeout(resetTimer);
+      window.clearTimeout(durationTimer);
+    };
+  }, [src]);
 
-  const canControl = enabled && Boolean(src);
-  const canSeek = canControl && duration > 0;
+  const canSeek = duration > 0;
   const safeCurrentTime = clampPlaybackTime(currentTime, duration);
   const filled = progressPercent(safeCurrentTime, duration);
 
   async function togglePlayback() {
     const audio = audioRef.current;
-    if (!audio || !canControl) return;
+    if (!audio) return;
     if (audio.paused) {
       await audio.play();
       return;
@@ -353,11 +542,11 @@ function AudioPlayer({ enabled, src, label }: { enabled: boolean; src: string; l
   }
 
   return (
-    <div className="rounded border border-[#e4e3de] bg-[#f7f7f5] px-3 py-3">
+    <div className="rounded-xl border border-[#e4e0d7] bg-white px-4 py-4">
       <audio
         ref={audioRef}
         preload="metadata"
-        src={canControl ? src : undefined}
+        src={src}
         onLoadedMetadata={(event) => readAudioDuration(event.currentTarget, setDuration)}
         onDurationChange={(event) => readAudioDuration(event.currentTarget, setDuration)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
@@ -368,17 +557,16 @@ function AudioPlayer({ enabled, src, label }: { enabled: boolean; src: string; l
           setCurrentTime(event.currentTarget.duration || 0);
         }}
       />
-      <div className="grid grid-cols-[2rem_4.7rem_1fr] items-center gap-2">
+      <div className="grid grid-cols-[2rem_4.4rem_minmax(0,1fr)] items-center gap-3">
         <button
           type="button"
-          disabled={!canControl}
           onClick={togglePlayback}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[#1d1d1b] transition hover:bg-[#e6e5df] disabled:text-[#b6b2a8] disabled:hover:bg-transparent"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-[#1d1d1b] transition hover:bg-[#e8e5dd]"
           aria-label={`${playing ? "暂停" : "播放"} ${label}`}
         >
           {playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
         </button>
-        <div className="font-mono text-xs text-[#34332f] tabular-nums sm:text-sm">
+        <div className="font-mono text-sm text-[#34332f] tabular-nums">
           <div>{formatPlaybackTime(safeCurrentTime)}</div>
           <div className="text-[#8a877f]">{formatPlaybackTime(duration)}</div>
         </div>
@@ -401,79 +589,11 @@ function AudioPlayer({ enabled, src, label }: { enabled: boolean; src: string; l
   );
 }
 
-function readAudioDuration(audio: HTMLAudioElement, setDuration: (duration: number) => void) {
-  if (Number.isFinite(audio.duration) && audio.duration > 0) {
-    setDuration(audio.duration);
-  }
-}
-
-function PracticePanel() {
-  return (
-    <div className="rounded-lg border border-[#deded8] bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center gap-2 font-semibold text-[#1d1d1b]">
-        <SlidersHorizontal size={18} />
-        练习模式
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {["AB Loop", "变速", "变调"].map((label) => (
-          <button
-            key={label}
-            type="button"
-            disabled
-            className="h-10 rounded border border-[#deded8] bg-[#f2f2ef] text-sm font-medium text-[#9a968c]"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SystemPanel({ system }: { system: BackendHealth | null }) {
-  const service = system?.service ?? "";
-  const entries = system
-    ? [
-        { key: "python", label: "python", ok: system.python },
-        { key: "ffmpeg", label: "ffmpeg", ok: system.ffmpeg },
-        { key: "ffprobe", label: "ffprobe", ok: system.ffprobe },
-        { key: "demucs", label: "demucs", ok: system.demucs }
-      ]
-    : null;
-  return (
-    <div className="rounded-lg border border-[#deded8] bg-white p-5 shadow-sm">
-      <div className="mb-3 font-semibold text-[#1d1d1b]">后端运行环境</div>
-      <div className="space-y-2">
-        {entries
-          ? entries.map((item) => (
-              <div key={item.key} className="flex items-start justify-between gap-3 border-t border-[#eeeeea] pt-2 text-sm first:border-t-0 first:pt-0">
-                <span className="min-w-0">
-                  <span className="block font-medium">{item.label}</span>
-                  <span className="mt-0.5 block truncate text-xs text-[#8e897f]" title={service}>
-                    {service}
-                  </span>
-                </span>
-                <span className={`shrink-0 ${item.ok ? "text-[#6f6248]" : "text-[#a33a42]"}`}>
-                  {item.ok ? "可用" : "不可用"}
-                </span>
-              </div>
-            ))
-          : ["python", "ffmpeg", "ffprobe", "demucs"].map((item) => (
-              <div key={item} className="flex items-center justify-between border-t border-[#eeeeea] pt-2 text-sm text-[#aaa69d] first:border-t-0 first:pt-0">
-                <span>{item}</span>
-                <span>检查中</span>
-              </div>
-            ))}
-      </div>
-    </div>
-  );
-}
-
 function Message({ tone, text }: { tone: "error" | "warning"; text: string }) {
   const isError = tone === "error";
   return (
     <div
-      className={`mt-4 flex items-start gap-2 rounded px-3 py-2 text-sm ${
+      className={`mt-4 flex items-start gap-2 rounded-2xl px-4 py-3 text-sm ${
         isError ? "bg-[#fff0f1] text-[#8b1f2c]" : "bg-[#f7f1df] text-[#6f5a1c]"
       }`}
     >
@@ -481,4 +601,33 @@ function Message({ tone, text }: { tone: "error" | "warning"; text: string }) {
       <span>{text}</span>
     </div>
   );
+}
+
+function uiModeToJobMode(mode: UiMode): JobMode {
+  return mode === "standard" ? "balanced" : "quality";
+}
+
+function buildResultState(job: JobRecord, fallbackTargetLabel: string): ResultState | null {
+  const isolated = job.files?.isolated;
+  const backing = job.files?.backing;
+  if (!isolated || !backing) return null;
+
+  return {
+    isolatedUrl: isolated.url,
+    backingUrl: backing.url,
+    isolatedLabel: isolated.label,
+    backingLabel: backing.label,
+    targetLabel: job.targetLabel || fallbackTargetLabel
+  };
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function readAudioDuration(audio: HTMLAudioElement, setDuration: (duration: number) => void) {
+  if (Number.isFinite(audio.duration) && audio.duration > 0) {
+    setDuration(audio.duration);
+  }
 }

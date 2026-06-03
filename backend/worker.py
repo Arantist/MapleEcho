@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from demucs_runner import DemucsError, run_demucs
+from demucs_runner import DemucsError, TargetStem, run_demucs
 
 JobStatus = Literal["queued", "processing", "completed", "failed"]
-JobMode = Literal["fast", "quality"]
+JobMode = Literal["balanced", "quality"]
 
 
 @dataclass
@@ -17,6 +17,8 @@ class JobRecord:
     progress: int
     message: str
     mode: JobMode
+    target: TargetStem
+    bitrate: int
     input_path: Path
     job_dir: Path
 
@@ -30,7 +32,7 @@ def run_job(job_id: str) -> None:
         job.status = "processing"
         job.progress = 10
         job.message = "正在启动 Demucs。"
-        run_demucs(job.input_path, job.job_dir, job.mode, progress=lambda value, message: update(job, value, message))
+        run_demucs(job.input_path, job.job_dir, job.mode, job.target, progress=lambda value, message: update(job, value, message))
         job.status = "completed"
         job.progress = 100
         job.message = "分离完成。"

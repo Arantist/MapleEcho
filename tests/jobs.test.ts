@@ -53,7 +53,7 @@ describe("job storage", () => {
       fileName: "one.mp3",
       extension: "mp3",
       input: Buffer.from("one"),
-      mode: "speed"
+      mode: "balanced"
     });
     const second = await createJob({
       rootDir,
@@ -78,7 +78,7 @@ describe("job storage", () => {
       fileName: "queued.mp3",
       extension: "mp3",
       input: Buffer.from("queued"),
-      mode: "speed"
+      mode: "balanced"
     });
 
     expect((await findActiveJob(rootDir))?.id).toBe(queued.id);

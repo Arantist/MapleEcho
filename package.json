@@ -1,6 +1,6 @@
 {
   "name": "mapleecho",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run test && npm run build"
@@ -27,6 +27,8 @@
     "@types/node": "^22.15.32",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.7",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

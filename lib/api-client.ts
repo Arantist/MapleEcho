@@ -1,4 +1,4 @@
-import type { BackendHealth, BackendJobMode, BackendJobResponse, JobMode, JobRecord, JobStatus } from "@/lib/types";
+import type { BackendHealth, BackendJobMode, BackendJobResponse, JobMode, JobRecord, JobStatus, TargetStem } from "@/lib/types";
 
 export const API_CONFIGURATION_ERROR = "请先配置 NEXT_PUBLIC_API_BASE_URL。";
 export const API_UNAVAILABLE_ERROR = "后端服务不可用，请检查 Google Cloud 后端是否启动。";
@@ -21,7 +21,7 @@ export function buildApiUrl(baseUrl: string, path: string) {
 }
 
 export function modeToBackendMode(mode: JobMode): BackendJobMode {
-  return mode === "speed" ? "fast" : "quality";
+  return mode;
 }
 
 export async function fetchBackendHealth(baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL): Promise<BackendHealth> {
@@ -35,13 +35,15 @@ export async function fetchBackendHealth(baseUrl = process.env.NEXT_PUBLIC_API_B
 export async function createBackendJob(input: {
   file: File;
   mode: JobMode;
+  target: TargetStem;
   baseUrl?: string;
 }): Promise<JobRecord> {
   const apiBaseUrl = requireApiBaseUrl(input.baseUrl);
   const form = new FormData();
   form.append("file", input.file);
 
-  const response = await fetch(buildApiUrl(apiBaseUrl, `/api/jobs?mode=${modeToBackendMode(input.mode)}`), {
+  const params = new URLSearchParams({ mode: modeToBackendMode(input.mode), target: input.target });
+  const response = await fetch(buildApiUrl(apiBaseUrl, `/api/jobs?${params.toString()}`), {
     method: "POST",
     body: form
   });
@@ -66,7 +68,7 @@ export function mapBackendJob(
   payload: BackendJobResponse,
   baseUrl: string,
   originalName = "",
-  mode: JobMode = "speed"
+  mode: JobMode = "balanced"
 ): JobRecord {
   const now = new Date().toISOString();
   return {
@@ -78,11 +80,21 @@ export function mapBackendJob(
     progress: payload.progress ?? (payload.status === "completed" ? 100 : 0),
     message: payload.message,
     error: payload.status === "failed" ? payload.message : undefined,
+    target: payload.target,
+    targetLabel: payload.targetLabel,
+    format: payload.format,
+    bitrate: payload.bitrate,
     files: {
-      vocals: payload.outputs?.vocals ? buildApiUrl(baseUrl, payload.outputs.vocals) : undefined,
-      instrumental: payload.outputs?.instrumental ? buildApiUrl(baseUrl, payload.outputs.instrumental) : undefined,
-      guitar: payload.outputs?.guitar ? buildApiUrl(baseUrl, payload.outputs.guitar) : undefined,
-      no_guitar: payload.outputs?.no_guitar ? buildApiUrl(baseUrl, payload.outputs.no_guitar) : undefined
+      isolated: payload.isolated
+        ? { label: payload.isolated.label, url: buildApiUrl(baseUrl, payload.isolated.url) }
+        : payload.outputs?.guitar
+          ? { label: "吉他轨道", url: buildApiUrl(baseUrl, payload.outputs.guitar) }
+          : undefined,
+      backing: payload.backing
+        ? { label: payload.backing.label, url: buildApiUrl(baseUrl, payload.backing.url) }
+        : payload.outputs?.no_guitar
+          ? { label: "去吉他伴奏", url: buildApiUrl(baseUrl, payload.outputs.no_guitar) }
+          : undefined
     },
     createdAt: now,
     updatedAt: now

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -14,10 +15,16 @@ from fastapi.responses import FileResponse
 
 from worker import JobRecord, jobs, run_job
 
-SERVICE_NAME = "audio-separation-backend"
+SERVICE_NAME = "mapleecho-backend"
 JOBS_ROOT = Path("/tmp/audio-jobs")
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024
 ALLOWED_EXTENSIONS = {"mp3", "wav", "flac", "m4a", "aac", "ogg"}
+TARGET_LABELS = {
+    "guitar": "电吉他",
+    "bass": "贝斯",
+    "drums": "鼓点",
+    "vocals": "人声",
+}
 
 app = FastAPI(title=SERVICE_NAME)
 
@@ -37,7 +44,7 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health() -> dict[str, bool | str]:
+def health() -> dict[str, bool | int | float | str | list[str]]:
     return {
         "ok": True,
         "service": SERVICE_NAME,
@@ -45,6 +52,12 @@ def health() -> dict[str, bool | str]:
         "ffprobe": executable_exists("ffprobe"),
         "python": Path(sys.executable).exists(),
         "demucs": executable_exists("demucs") or python_module_exists("demucs"),
+        "torch": python_module_exists("torch"),
+        "cpuCores": os.cpu_count() or 1,
+        "memoryGb": memory_gb(),
+        "pythonVersion": platform.python_version(),
+        "model": "guitar=htdemucs_6s, bass/drums/vocals=htdemucs",
+        "supportedTargets": list(TARGET_LABELS.keys()),
     }
 
 
@@ -52,7 +65,8 @@ def health() -> dict[str, bool | str]:
 async def create_job(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    mode: Literal["fast", "quality"] = Query("fast"),
+    mode: Literal["balanced", "quality"] = Query("balanced"),
+    target: Literal["guitar", "bass", "drums", "vocals"] = Query("guitar"),
 ) -> dict[str, str]:
     extension = validate_upload_name(file.filename or "")
     job_id = uuid4().hex
@@ -72,6 +86,8 @@ async def create_job(
         progress=0,
         message="任务已进入队列。",
         mode=mode,
+        target=target,
+        bitrate=320 if mode == "quality" else 256,
         input_path=input_path,
         job_dir=job_dir,
     )
@@ -87,35 +103,29 @@ def get_job(job_id: str) -> dict[str, object]:
         "status": job.status,
         "progress": job.progress,
         "message": job.message,
+        "target": job.target,
+        "targetLabel": TARGET_LABELS[job.target],
+        "mode": job.mode,
+        "format": "mp3",
+        "bitrate": job.bitrate,
     }
     if job.status == "completed":
-        payload["outputs"] = {
-            "vocals": f"/api/jobs/{job_id}/download/vocals",
-            "instrumental": f"/api/jobs/{job_id}/download/instrumental",
-            "guitar": f"/api/jobs/{job_id}/download/guitar",
-            "no_guitar": f"/api/jobs/{job_id}/download/no_guitar",
+        payload["isolated"] = {
+            "label": f"{TARGET_LABELS[job.target]}轨道",
+            "url": f"/outputs/{job_id}/{job.target}.mp3",
+        }
+        payload["backing"] = {
+            "label": backing_label(job.target),
+            "url": f"/outputs/{job_id}/no_{job.target}.mp3",
         }
     return payload
 
 
-@app.get("/api/jobs/{job_id}/download/vocals")
-def download_vocals(job_id: str) -> FileResponse:
-    return download_result(job_id, "vocals.wav")
-
-
-@app.get("/api/jobs/{job_id}/download/instrumental")
-def download_instrumental(job_id: str) -> FileResponse:
-    return download_result(job_id, "instrumental.wav")
-
-
-@app.get("/api/jobs/{job_id}/download/guitar")
-def download_guitar(job_id: str) -> FileResponse:
-    return download_result(job_id, "guitar.wav")
-
-
-@app.get("/api/jobs/{job_id}/download/no_guitar")
-def download_no_guitar(job_id: str) -> FileResponse:
-    return download_result(job_id, "no_guitar.wav")
+@app.get("/outputs/{job_id}/{filename}")
+def output_file(job_id: str, filename: str) -> FileResponse:
+    if filename not in {f"{target}.mp3" for target in TARGET_LABELS} | {f"no_{target}.mp3" for target in TARGET_LABELS}:
+        raise HTTPException(status_code=404, detail="结果文件不存在。")
+    return download_result(job_id, filename)
 
 
 def download_result(job_id: str, filename: str) -> FileResponse:
@@ -125,7 +135,13 @@ def download_result(job_id: str, filename: str) -> FileResponse:
     path = job.job_dir / "result" / filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="结果文件不存在。")
-    return FileResponse(path, media_type="audio/wav", filename=filename)
+    return FileResponse(path, media_type="audio/mpeg", filename=filename)
+
+
+def backing_label(target: str) -> str:
+    if target == "guitar":
+        return "去吉他伴奏"
+    return f"去{TARGET_LABELS[target]}伴奏"
 
 
 def get_existing_job(job_id: str) -> JobRecord:
@@ -167,3 +183,12 @@ def python_module_exists(name: str) -> bool:
         check=False,
     )
     return completed.returncode == 0
+
+
+def memory_gb() -> float:
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        pages = os.sysconf("SC_PHYS_PAGES")
+        return round(page_size * pages / 1024 / 1024 / 1024, 2)
+    except (AttributeError, OSError, ValueError):
+        return 0.0

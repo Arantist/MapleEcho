@@ -6,10 +6,10 @@ describe("validateUploadMetadata", () => {
     const result = validateUploadMetadata({
       fileName: "practice-track.MP3",
       fileSize: 1024 * 1024,
-      mode: "speed"
+      mode: "balanced"
     });
 
-    expect(result).toEqual({ ok: true, extension: "mp3", mode: "speed" });
+    expect(result).toEqual({ ok: true, extension: "mp3", mode: "balanced" });
   });
 
   test("rejects unsupported extensions", () => {
@@ -30,7 +30,7 @@ describe("validateUploadMetadata", () => {
     const result = validateUploadMetadata({
       fileName: "large.wav",
       fileSize: 101 * 1024 * 1024,
-      mode: "speed"
+      mode: "balanced"
     });
 
     expect(result).toEqual({
@@ -44,13 +44,13 @@ describe("validateUploadMetadata", () => {
     const result = validateUploadMetadata({
       fileName: "song.wav",
       fileSize: 1000,
-      mode: "balanced"
+      mode: "speed"
     });
 
     expect(result).toEqual({
       ok: false,
       status: 400,
-      message: "处理模式只能是 speed 或 quality。"
+      message: "处理模式只能是 balanced 或 quality。"
     });
   });
 });

@@ -22,11 +22,11 @@ export function validateUploadMetadata(input: {
   fileSize: number;
   mode: unknown;
 }): ValidUpload | InvalidUpload {
-  if (input.mode !== "speed" && input.mode !== "quality") {
+  if (input.mode !== "balanced" && input.mode !== "quality") {
     return {
       ok: false,
       status: 400,
-      message: "处理模式只能是 speed 或 quality。"
+      message: "处理模式只能是 balanced 或 quality。"
     };
   }
 
