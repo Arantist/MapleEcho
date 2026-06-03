@@ -14,6 +14,12 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+Google Cloud 后端 VM 使用 CPU wheel，避免安装 CUDA 依赖占满磁盘：
+
+```bash
+pip install -r requirements-cpu.txt
+```
+
 ## 启动前端
 
 ```bash
