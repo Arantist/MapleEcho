@@ -5,3 +5,6 @@ demucs==4.0.1
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.6.0+cpu
 torchaudio==2.6.0+cpu
+ncmdump==0.1.1
+mutagen==1.48.1
+pycryptodome==3.23.0

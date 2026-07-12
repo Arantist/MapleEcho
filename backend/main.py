@@ -13,12 +13,12 @@ from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Upload
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from worker import JobRecord, jobs, run_job
+from worker import JobMode, JobRecord, converted_output_filename, jobs, run_job
 
 SERVICE_NAME = "mapleecho-backend"
 JOBS_ROOT = Path("/tmp/audio-jobs")
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024
-ALLOWED_EXTENSIONS = {"mp3", "wav", "flac", "m4a", "aac", "ogg"}
+ALLOWED_EXTENSIONS = {"mp3", "wav", "flac", "m4a", "aac", "ogg", "ncm"}
 TARGET_LABELS = {
     "guitar": "电吉他",
     "bass": "贝斯",
@@ -65,10 +65,11 @@ def health() -> dict[str, bool | int | float | str | list[str]]:
 async def create_job(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    mode: Literal["balanced", "quality"] = Query("balanced"),
+    mode: JobMode = Query("balanced"),
     target: Literal["guitar", "bass", "drums", "vocals"] = Query("guitar"),
 ) -> dict[str, str]:
-    extension = validate_upload_name(file.filename or "")
+    original_name = file.filename or ""
+    extension = validate_upload_name(original_name)
     job_id = uuid4().hex
     job_dir = JOBS_ROOT / job_id
     input_dir = job_dir / "input"
@@ -90,6 +91,8 @@ async def create_job(
         bitrate=320 if mode == "quality" else 256,
         input_path=input_path,
         job_dir=job_dir,
+        original_name=original_name,
+        converted_filename=converted_output_filename(original_name) if mode == "convert" else None,
     )
     background_tasks.add_task(run_job, job_id)
     return {"jobId": job_id, "status": "queued"}
@@ -109,27 +112,39 @@ def get_job(job_id: str) -> dict[str, object]:
         "format": "mp3",
         "bitrate": job.bitrate,
     }
+    if job.error_code:
+        payload["errorCode"] = job.error_code
     if job.status == "completed":
-        payload["isolated"] = {
-            "label": f"{TARGET_LABELS[job.target]}轨道",
-            "url": f"/outputs/{job_id}/{job.target}.mp3",
-        }
-        payload["backing"] = {
-            "label": backing_label(job.target),
-            "url": f"/outputs/{job_id}/no_{job.target}.mp3",
-        }
+        if job.mode == "convert":
+            filename = job.converted_filename or converted_output_filename(job.original_name)
+            payload["converted"] = {
+                "label": "MP3 文件",
+                "url": f"/outputs/{job_id}/{filename}",
+            }
+        else:
+            payload["isolated"] = {
+                "label": f"{TARGET_LABELS[job.target]}轨道",
+                "url": f"/outputs/{job_id}/{job.target}.mp3",
+            }
+            payload["backing"] = {
+                "label": backing_label(job.target),
+                "url": f"/outputs/{job_id}/no_{job.target}.mp3",
+            }
     return payload
 
 
 @app.get("/outputs/{job_id}/{filename}")
 def output_file(job_id: str, filename: str) -> FileResponse:
-    if filename not in {f"{target}.mp3" for target in TARGET_LABELS} | {f"no_{target}.mp3" for target in TARGET_LABELS}:
-        raise HTTPException(status_code=404, detail="结果文件不存在。")
-    return download_result(job_id, filename)
-
-
-def download_result(job_id: str, filename: str) -> FileResponse:
     job = get_existing_job(job_id)
+    allowed = {f"{target}.mp3" for target in TARGET_LABELS} | {f"no_{target}.mp3" for target in TARGET_LABELS}
+    if job.converted_filename:
+        allowed.add(job.converted_filename)
+    if filename not in allowed:
+        raise HTTPException(status_code=404, detail="结果文件不存在。")
+    return download_result(job, filename)
+
+
+def download_result(job: JobRecord, filename: str) -> FileResponse:
     if job.status != "completed":
         raise HTTPException(status_code=409, detail="任务尚未完成。")
     path = job.job_dir / "result" / filename
@@ -154,7 +169,7 @@ def get_existing_job(job_id: str) -> JobRecord:
 def validate_upload_name(filename: str) -> str:
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if extension not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="仅支持 mp3、wav、flac、m4a、aac、ogg 音频文件。")
+        raise HTTPException(status_code=400, detail="仅支持 mp3、wav、flac、m4a、aac、ogg、ncm 音频文件。")
     return extension
 
 

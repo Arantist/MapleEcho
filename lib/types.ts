@@ -1,8 +1,8 @@
-export type JobMode = "balanced" | "quality";
+export type JobMode = "balanced" | "quality" | "convert";
 export type JobStatus = "queued" | "running" | "completed" | "failed";
 export type TargetStem = "guitar" | "bass" | "drums" | "vocals";
-export type StemName = "isolated" | "backing";
-export type BackendJobMode = "balanced" | "quality";
+export type StemName = "isolated" | "backing" | "converted";
+export type BackendJobMode = "balanced" | "quality" | "convert";
 export type BackendJobStatus = "queued" | "processing" | "completed" | "failed";
 
 export type JobFileLink = {
@@ -13,6 +13,7 @@ export type JobFileLink = {
 export type JobFileLinks = {
   isolated?: JobFileLink;
   backing?: JobFileLink;
+  converted?: JobFileLink;
 };
 
 export type JobRecord = {
@@ -24,6 +25,7 @@ export type JobRecord = {
   progress: number;
   message?: string;
   error?: string;
+  errorCode?: string;
   warning?: string;
   device?: "mps" | "cpu";
   target?: TargetStem;
@@ -62,6 +64,8 @@ export type BackendJobResponse = {
   bitrate?: number;
   isolated?: JobFileLink;
   backing?: JobFileLink;
+  converted?: JobFileLink;
+  errorCode?: string;
   outputs?: {
     vocals?: string;
     instrumental?: string;

@@ -75,11 +75,12 @@ export function mapBackendJob(
     id: payload.jobId,
     originalName,
     extension: originalName.split(".").pop()?.toLowerCase() || "",
-    mode,
+    mode: payload.mode ?? mode,
     status: mapBackendStatus(payload.status),
     progress: payload.progress ?? (payload.status === "completed" ? 100 : 0),
     message: payload.message,
     error: payload.status === "failed" ? payload.message : undefined,
+    errorCode: payload.errorCode,
     target: payload.target,
     targetLabel: payload.targetLabel,
     format: payload.format,
@@ -94,7 +95,10 @@ export function mapBackendJob(
         ? { label: payload.backing.label, url: buildApiUrl(baseUrl, payload.backing.url) }
         : payload.outputs?.no_guitar
           ? { label: "去吉他伴奏", url: buildApiUrl(baseUrl, payload.outputs.no_guitar) }
-          : undefined
+          : undefined,
+      converted: payload.converted
+        ? { label: payload.converted.label, url: buildApiUrl(baseUrl, payload.converted.url) }
+        : undefined
     },
     createdAt: now,
     updatedAt: now

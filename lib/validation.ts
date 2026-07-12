@@ -1,7 +1,7 @@
 import type { JobMode } from "@/lib/types";
 
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = ["mp3", "wav", "flac", "m4a", "aac", "ogg"] as const;
+const ALLOWED_EXTENSIONS = ["mp3", "wav", "flac", "m4a", "aac", "ogg", "ncm"] as const;
 
 type SupportedExtension = (typeof ALLOWED_EXTENSIONS)[number];
 
@@ -22,11 +22,11 @@ export function validateUploadMetadata(input: {
   fileSize: number;
   mode: unknown;
 }): ValidUpload | InvalidUpload {
-  if (input.mode !== "balanced" && input.mode !== "quality") {
+  if (input.mode !== "balanced" && input.mode !== "quality" && input.mode !== "convert") {
     return {
       ok: false,
       status: 400,
-      message: "处理模式只能是 balanced 或 quality。"
+      message: "处理模式只能是 balanced、quality 或 convert。"
     };
   }
 
@@ -51,7 +51,7 @@ export function validateUploadMetadata(input: {
     return {
       ok: false,
       status: 400,
-      message: "仅支持 mp3、wav、flac、m4a、aac、ogg 音频文件。"
+      message: "仅支持 mp3、wav、flac、m4a、aac、ogg、ncm 音频文件。"
     };
   }
 
