@@ -209,7 +209,7 @@ export default function Home() {
     <main className="min-h-screen bg-[#f5f3ed] text-[#1d1c19]">
       <AppHeader />
 
-      <div className="workbench mx-auto grid w-full max-w-[1440px] gap-5 px-4 py-6 sm:px-6">
+      <div className="workbench mx-auto grid w-full max-w-[1280px] gap-5 px-4 py-6 sm:px-6">
         <div className="workbench-column workbench-left">
           <div className="workbench-upload min-w-0">
             <UploadCard

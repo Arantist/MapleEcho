@@ -49,7 +49,7 @@ http://localhost:3000
 CORS_ORIGINS=http://localhost:3000,https://fengye-rain.life,https://www.fengye-rain.life
 ```
 
-Vercel 前端默认走 `/api/backend` rewrite。`next.config.ts` 使用 `BACKEND_API_BASE_URL`，未设置时本地回退到 `http://127.0.0.1:8000`。切换新 C4D 时，在 Vercel 设置：
+Vercel 前端默认走 `/api/backend` rewrite。`next.config.ts` 使用 `BACKEND_API_BASE_URL`，未设置时默认转发到当前 Google Cloud 后端 `http://34.136.34.53:8000`。本地开发需要直连本机后端时，在 `.env.local` 设置 `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`。切换新 C4D 时，在 Vercel 设置：
 
 ```env
 BACKEND_API_BASE_URL=http://<new-c4d-ip>:8000

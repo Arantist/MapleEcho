@@ -98,7 +98,7 @@ input[type="range"]:disabled::-moz-range-thumb {
 
 @media (min-width: 1024px) {
   .workbench {
-    grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+    grid-template-columns: minmax(0, 52fr) minmax(0, 48fr);
     grid-template-areas: none;
     align-items: start;
   }
