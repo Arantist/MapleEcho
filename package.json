@@ -1,13 +1,16 @@
 {
   "name": "mapleecho",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": "24.x"
   },
   "scripts": {
+    "prepare:worklet": "node scripts/prepare-soundtouch-worklet.mjs",
+    "predev": "npm run prepare:worklet",
     "dev": "next dev",
+    "prebuild": "npm run prepare:worklet",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -16,6 +19,7 @@
     "check": "npm run test && npm run build"
   },
   "dependencies": {
+    "@soundtouchjs/audio-worklet": "^2.1.0",
     "@tailwindcss/postcss": "^4.1.11",
     "lucide-react": "^1.17.0",
     "next": "^16.2.6",

@@ -1,6 +1,7 @@
 export type JobMode = "balanced" | "quality" | "convert";
 export type JobStatus = "queued" | "running" | "completed" | "failed";
 export type TargetStem = "guitar" | "bass" | "drums" | "vocals";
+export type PracticeTrackId = TargetStem | `no_${TargetStem}`;
 export type StemName = "isolated" | "backing" | "converted";
 export type BackendJobMode = "balanced" | "quality" | "convert";
 export type BackendJobStatus = "queued" | "processing" | "completed" | "failed";
@@ -14,6 +15,12 @@ export type JobFileLinks = {
   isolated?: JobFileLink;
   backing?: JobFileLink;
   converted?: JobFileLink;
+};
+
+export type PracticeTrack = {
+  id: PracticeTrackId;
+  label: string;
+  url: string;
 };
 
 export type JobRecord = {

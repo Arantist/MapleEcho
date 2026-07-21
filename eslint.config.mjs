@@ -5,7 +5,7 @@ import nextTypeScript from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTypeScript,
-  globalIgnores([".next/**", ".venv/**", "out/**", "build/**", "next-env.d.ts"])
+  globalIgnores([".next/**", ".venv/**", "out/**", "build/**", "public/soundtouch-processor.js", "next-env.d.ts"])
 ]);
 
 export default eslintConfig;
