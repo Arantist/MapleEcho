@@ -40,6 +40,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Accept-Ranges", "Content-Length", "Content-Range"],
 )
 
 
@@ -150,7 +151,12 @@ def download_result(job: JobRecord, filename: str) -> FileResponse:
     path = job.job_dir / "result" / filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="结果文件不存在。")
-    return FileResponse(path, media_type="audio/mpeg", filename=filename)
+    return FileResponse(
+        path,
+        media_type="audio/mpeg",
+        filename=filename,
+        headers={"Accept-Ranges": "bytes"},
+    )
 
 
 def backing_label(target: str) -> str:

@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  AudioLines,
   CheckCircle2,
   Download,
   FileAudio,
+  Gauge,
   LoaderCircle,
   Music2,
   Pause,
   Play,
+  Repeat2,
   RotateCcw,
   SlidersHorizontal,
   Sparkles,
@@ -23,8 +26,9 @@ import {
   fetchBackendJob,
   getApiBaseUrl
 } from "@/lib/api-client";
-import { clampPlaybackTime, formatPlaybackTime, progressPercent } from "@/lib/player";
-import type { JobMode, JobRecord, TargetStem } from "@/lib/types";
+import { clampPlaybackTime, defaultPracticeTrackMap, formatPlaybackTime, progressPercent } from "@/lib/player";
+import { usePracticePlayer, type PracticePlayer } from "@/lib/use-practice-player";
+import type { JobMode, JobRecord, PracticeTrack, PracticeTrackId, TargetStem } from "@/lib/types";
 
 type UiMode = "standard" | "quality" | "convert";
 
@@ -50,6 +54,7 @@ type ResultState = {
   convertedUrl?: string;
   convertedLabel?: string;
   convertedDownloadName?: string;
+  target?: TargetStem;
 };
 
 const TARGET_OPTIONS: TargetOption[] = [
@@ -85,6 +90,9 @@ export default function Home() {
     () => TARGET_OPTIONS.find((option) => option.value === selectedTarget)?.label ?? "目标轨道",
     [selectedTarget]
   );
+  const practiceTracks = useMemo(() => buildPracticeTracks(result), [result]);
+  const defaultPracticeTrackId = result?.target ? defaultPracticeTrackMap[result.target] : null;
+  const { player: practicePlayer, audioElement: practiceAudioElement } = usePracticePlayer(practiceTracks, defaultPracticeTrackId);
   const showResultDetail = Boolean(job || result || isProcessing);
   const canSubmit = Boolean(selectedFile) && !isProcessing && (!isConvertMode || isNcmFile);
   const progress = job?.progress ?? (isProcessing ? 8 : 0);
@@ -108,14 +116,14 @@ export default function Home() {
       if (nextJob.status === "completed") {
         setIsProcessing(false);
         setStatusText(nextJob.mode === "convert" ? "转换完成" : "分离完成");
-        setResult(buildResultState(nextJob, selectedTargetLabel));
+        setResult(buildResultState(nextJob, selectedTargetLabel, selectedTarget));
         return;
       }
 
       setIsProcessing(false);
       setStatusText("处理失败");
     },
-    [selectedTargetLabel]
+    [selectedTarget, selectedTargetLabel]
   );
 
   useEffect(() => {
@@ -208,6 +216,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f5f3ed] text-[#1d1c19]">
       <AppHeader />
+      {practiceAudioElement}
 
       <div className="workbench mx-auto grid w-full max-w-[1280px] gap-5 px-4 py-6 sm:px-6">
         <div className="workbench-column workbench-left">
@@ -232,7 +241,7 @@ export default function Home() {
           </div>
 
           <div className="workbench-practice min-w-0">
-            <PracticePanel />
+            <PracticePanel tracks={practiceTracks} player={practicePlayer} />
           </div>
         </div>
 
@@ -245,6 +254,7 @@ export default function Home() {
               result={result}
               statusText={statusText}
               progress={progress}
+              practicePlayer={practicePlayer}
             />
           </div>
 
@@ -284,7 +294,7 @@ function AppHeader() {
           </div>
         </div>
         <div className="hidden shrink-0 items-center gap-2 text-sm text-[#716c63] md:flex">
-          <span>单文件</span><Dot /><span>后端处理</span><Dot /><span>Google Cloud</span>
+          <span>单文件</span><Dot /><span>后端处理</span>
         </div>
       </div>
     </header>
@@ -446,7 +456,8 @@ function ResultsCard({
   showDetail,
   result,
   statusText,
-  progress
+  progress,
+  practicePlayer
 }: {
   isConvertMode: boolean;
   isProcessing: boolean;
@@ -454,6 +465,7 @@ function ResultsCard({
   result: ResultState | null;
   statusText: string;
   progress: number;
+  practicePlayer: PracticePlayer;
 }) {
   return (
     <Card className="min-h-[350px] overflow-hidden">
@@ -483,8 +495,8 @@ function ResultsCard({
               />
             ) : result.isolatedUrl && result.backingUrl && result.isolatedLabel && result.backingLabel ? (
               <>
-                <ResultPanel title={result.targetLabel || "目标轨道"} subtitle={result.isolatedLabel} src={result.isolatedUrl} downloadHref={result.isolatedUrl} downloadLabel="下载目标轨道" />
-                <ResultPanel title={`No ${result.targetLabel || "目标轨道"}`} subtitle={result.backingLabel} src={result.backingUrl} downloadHref={result.backingUrl} downloadLabel="下载练习伴奏" />
+                <ResultPanel title={result.targetLabel || "目标轨道"} subtitle={result.isolatedLabel} src={result.isolatedUrl} downloadHref={result.isolatedUrl} downloadLabel="下载目标轨道" trackId={result.target} practicePlayer={practicePlayer} />
+                <ResultPanel title={`No ${result.targetLabel || "目标轨道"}`} subtitle={result.backingLabel} src={result.backingUrl} downloadHref={result.backingUrl} downloadLabel="下载练习伴奏" trackId={result.target ? defaultPracticeTrackMap[result.target] : undefined} practicePlayer={practicePlayer} />
               </>
             ) : null}
           </div>
@@ -538,24 +550,120 @@ function ActionPanel({
   );
 }
 
-function PracticePanel() {
-  const options = ["AB Loop", "变速", "变调"];
+type PracticeMode = "loop" | "speed" | "pitch";
+
+function PracticePanel({ tracks, player }: { tracks: PracticeTrack[]; player: PracticePlayer }) {
+  const [mode, setMode] = useState<PracticeMode>("loop");
+  const disabled = tracks.length === 0;
+  const modes: { value: PracticeMode; label: string; icon: React.ReactNode }[] = [
+    { value: "loop", label: "AB Loop", icon: <Repeat2 size={15} aria-hidden="true" /> },
+    { value: "speed", label: "变速", icon: <Gauge size={15} aria-hidden="true" /> },
+    { value: "pitch", label: "变调", icon: <AudioLines size={15} aria-hidden="true" /> }
+  ];
+
   return (
     <Card>
       <div className="flex items-center gap-2">
         <SlidersHorizontal size={17} className="text-[#665f55]" aria-hidden="true" />
         <SectionLabel>PRACTICE / 练习模式</SectionLabel>
       </div>
+      <div className="mt-4">
+        <div className="mb-2 text-xs font-medium text-[#7a746b]">练习音轨</div>
+        <div className="grid grid-cols-2 gap-2">
+          {tracks.length > 0 ? tracks.map((track) => {
+            const active = player.activeTrackId === track.id;
+            return (
+              <button
+                key={track.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => void player.switchTrack(track.id)}
+                className={`min-w-0 rounded-[11px] border px-3 py-2.5 text-left transition-colors ${active ? "border-[#2c2a25] bg-[#fffdf8]" : "border-[#ded9cf] bg-[#faf8f3] hover:border-[#8b8377]"}`}
+              >
+                <span className="block truncate text-sm font-semibold text-[#292722]">{track.label}</span>
+                <span className="mt-0.5 block truncate font-mono text-[10px] text-[#8b847a]">{track.id}</span>
+              </button>
+            );
+          }) : (
+            <div className="col-span-2 rounded-[11px] border border-dashed border-[#d6d0c4] bg-[#faf8f3] px-4 py-3 text-sm text-[#8a847a]">
+              分离完成后自动选择去目标伴奏。
+            </div>
+          )}
+        </div>
+      </div>
       <div className="mt-4 grid grid-cols-3 gap-3">
-        {options.map((label) => (
-          <button key={label} type="button" disabled className="h-11 rounded-[12px] border border-[#ded9cf] bg-[#f5f2ec] text-sm font-semibold text-[#9a958c] disabled:cursor-not-allowed">
-            {label}
+        {modes.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={mode === option.value}
+            onClick={() => setMode(option.value)}
+            className={`flex h-11 items-center justify-center gap-1.5 rounded-[12px] border text-sm font-semibold transition-colors ${mode === option.value && !disabled ? "border-[#2c2a25] bg-[#2c2a25] text-white" : "border-[#ded9cf] bg-[#f8f5ef] text-[#625d54] hover:border-[#8b8377]"} disabled:cursor-not-allowed disabled:text-[#aaa49b]`}
+          >
+            {option.icon}{option.label}
           </button>
         ))}
       </div>
-      <p className="mt-4 text-sm leading-6 text-[#7a746b]">AB Loop、变速与变调功能开发中。</p>
+
+      <div className={`mt-4 rounded-[13px] border border-[#e3ded4] bg-[#faf8f3] p-4 ${disabled ? "opacity-55" : ""}`}>
+        {mode === "loop" ? (
+          <div>
+            <div className="grid grid-cols-2 gap-3">
+              <LoopPoint label="A / 起点" value={player.loopStart} disabled={disabled || player.duration <= 0} onSet={player.setLoopStartAtCurrentTime} />
+              <LoopPoint label="B / 终点" value={player.loopEnd} disabled={disabled || player.duration <= 0} onSet={player.setLoopEndAtCurrentTime} />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button type="button" disabled={disabled || player.duration <= 0} onClick={() => player.setLoopEnabled(!player.loopEnabled)} className={`h-10 rounded-[10px] border text-sm font-semibold ${player.loopEnabled ? "border-[#2c2a25] bg-[#2c2a25] text-white" : "border-[#d7d1c6] bg-white text-[#4d4942]"} disabled:cursor-not-allowed`}>
+                {player.loopEnabled ? "循环已开启" : "开启循环"}
+              </button>
+              <button type="button" disabled={disabled || player.duration <= 0} onClick={player.resetLoop} className="h-10 rounded-[10px] border border-[#d7d1c6] bg-white text-sm font-semibold text-[#4d4942] disabled:cursor-not-allowed">
+                重置 A / B
+              </button>
+            </div>
+          </div>
+        ) : mode === "speed" ? (
+          <div>
+            <ControlHeader label="播放速度" value={`${player.playbackRate.toFixed(2)}×`} />
+            <input type="range" min="0.5" max="1.5" step="0.05" value={player.playbackRate} disabled={disabled} onChange={(event) => player.setPlaybackRate(Number(event.target.value))} aria-label="练习播放速度" className="mt-3 h-7 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed" style={controlRangeBackground((player.playbackRate - 0.5) * 100)} />
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              {[0.75, 1, 1.25, 1.5].map((rate) => <MiniControlButton key={rate} active={player.playbackRate === rate} disabled={disabled} label={`${rate}×`} onClick={() => player.setPlaybackRate(rate)} />)}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[#7d766c]">0.5×–1.5×，浏览器保持原始音高。</p>
+          </div>
+        ) : (
+          <div>
+            <ControlHeader label="移调半音" value={`${player.pitchSemitones > 0 ? "+" : ""}${player.pitchSemitones}`} />
+            <input type="range" min="-6" max="6" step="1" value={player.pitchSemitones} disabled={disabled || player.pitchEngineStatus === "loading" || player.pitchEngineStatus === "unavailable"} onChange={(event) => void player.setPitchSemitones(Number(event.target.value))} aria-label="练习移调半音" className="mt-3 h-7 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed" style={controlRangeBackground(((player.pitchSemitones + 6) / 12) * 100)} />
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <MiniControlButton active={false} disabled={disabled || player.pitchEngineStatus === "loading" || player.pitchEngineStatus === "unavailable"} label="降半音" onClick={() => void player.setPitchSemitones(player.pitchSemitones - 1)} />
+              <MiniControlButton active={player.pitchSemitones === 0} disabled={disabled || player.pitchEngineStatus === "loading"} label="原调" onClick={() => void player.setPitchSemitones(0)} />
+              <MiniControlButton active={false} disabled={disabled || player.pitchEngineStatus === "loading" || player.pitchEngineStatus === "unavailable"} label="升半音" onClick={() => void player.setPitchSemitones(player.pitchSemitones + 1)} />
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[#7d766c]" aria-live="polite">{player.pitchEngineStatus === "loading" ? "正在加载 SoundTouch AudioWorklet…" : player.pitchEngineStatus === "unavailable" ? "当前浏览器无法启用 AudioWorklet 变调。" : "-6 至 +6 半音，首次使用会加载 SoundTouch AudioWorklet。"}</p>
+          </div>
+        )}
+      </div>
+      {player.message ? <p className="mt-3 text-sm leading-6 text-[#8b2731]" role="status">{player.message}</p> : null}
     </Card>
   );
+}
+
+function LoopPoint({ label, value, disabled, onSet }: { label: string; value: number; disabled: boolean; onSet: () => void }) {
+  return (
+    <button type="button" disabled={disabled} onClick={onSet} className="rounded-[10px] border border-[#d7d1c6] bg-white px-3 py-2.5 text-left disabled:cursor-not-allowed">
+      <span className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-[#81796e]">{label}</span>
+      <span className="mt-1 block font-mono text-sm font-semibold tabular-nums text-[#2e2b26]">{formatPlaybackTime(value)}</span>
+    </button>
+  );
+}
+
+function ControlHeader({ label, value }: { label: string; value: string }) {
+  return <div className="flex items-center justify-between gap-4"><span className="text-sm font-semibold text-[#403c36]">{label}</span><span className="font-mono text-sm font-semibold tabular-nums text-[#2b2924]">{value}</span></div>;
+}
+
+function MiniControlButton({ active, disabled, label, onClick }: { active: boolean; disabled: boolean; label: string; onClick: () => void }) {
+  return <button type="button" disabled={disabled} onClick={onClick} className={`h-9 rounded-[9px] border text-xs font-semibold ${active ? "border-[#2c2a25] bg-[#2c2a25] text-white" : "border-[#d7d1c6] bg-white text-[#575149]"} disabled:cursor-not-allowed`}>{label}</button>;
 }
 
 function Card({ className = "", children }: { className?: string; children: React.ReactNode }) {
@@ -624,7 +732,9 @@ function ResultPanel({
   src,
   downloadHref,
   downloadLabel,
-  downloadName
+  downloadName,
+  trackId,
+  practicePlayer
 }: {
   title: string;
   subtitle: string;
@@ -632,6 +742,8 @@ function ResultPanel({
   downloadHref: string;
   downloadLabel: string;
   downloadName?: string;
+  trackId?: PracticeTrackId;
+  practicePlayer?: PracticePlayer;
 }) {
   return (
     <div className="rounded-[14px] border border-[#e1dcd2] bg-[#faf8f3] p-4">
@@ -639,10 +751,30 @@ function ResultPanel({
         <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#827869]">{subtitle}</div>
         <div className="mt-2 truncate text-lg font-semibold text-[#201f1c]">{title}</div>
       </div>
-      <AudioPlayer src={src} label={title} />
+      {trackId && practicePlayer ? <SharedAudioPlayer trackId={trackId} label={title} player={practicePlayer} /> : <AudioPlayer src={src} label={title} />}
       <a href={downloadHref} download={downloadName || `${subtitle.toLowerCase().replaceAll(" ", "_")}.mp3`} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-[12px] border border-[#211f1c] bg-[#211f1c] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#38352f]">
         <Download size={16} aria-hidden="true" />{downloadLabel}
       </a>
+    </div>
+  );
+}
+
+function SharedAudioPlayer({ trackId, label, player }: { trackId: PracticeTrackId; label: string; player: PracticePlayer }) {
+  const active = player.activeTrackId === trackId;
+  const duration = active ? player.duration : 0;
+  const currentTime = active ? clampPlaybackTime(player.currentTime, duration) : 0;
+  const canSeek = active && duration > 0;
+  const filled = progressPercent(currentTime, duration);
+
+  return (
+    <div className={`min-w-0 rounded-[12px] border bg-white px-3 py-4 sm:px-4 ${active ? "border-[#aaa295]" : "border-[#e4e0d7]"}`}>
+      <div className="grid min-w-0 grid-cols-[2rem_4.1rem_minmax(0,1fr)] items-center gap-2 sm:gap-3">
+        <button type="button" onClick={() => void player.toggleTrackPlayback(trackId)} className="flex h-8 w-8 items-center justify-center rounded-full text-[#24221e] hover:bg-[#ece7dd]" aria-label={`${active && player.playing ? "暂停" : "播放"} ${label}`}>
+          {active && player.playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+        </button>
+        <div className="font-mono text-xs tabular-nums text-[#3b3832] sm:text-sm"><div>{formatPlaybackTime(currentTime)}</div><div className="text-[#918c83]">{formatPlaybackTime(duration)}</div></div>
+        <input type="range" min="0" max={duration > 0 ? duration : 1} step="0.01" value={duration > 0 ? currentTime : 0} disabled={!canSeek} onChange={(event) => player.seek(Number(event.target.value))} aria-label={`${label} 播放进度`} className="h-7 min-w-0 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed" style={{ background: `linear-gradient(to right, #292722 0%, #292722 ${filled}%, rgba(41,39,34,.15) ${filled}%, rgba(41,39,34,.15) 100%)` }} />
+      </div>
     </div>
   );
 }
@@ -709,13 +841,21 @@ function uiModeToJobMode(mode: UiMode): JobMode {
   return mode === "standard" ? "balanced" : mode;
 }
 
-function buildResultState(job: JobRecord, fallbackTargetLabel: string): ResultState | null {
+function buildResultState(job: JobRecord, fallbackTargetLabel: string, fallbackTarget: TargetStem): ResultState | null {
   const converted = job.files?.converted;
   if (converted) return { convertedUrl: converted.url, convertedLabel: converted.label, convertedDownloadName: fileNameFromUrl(converted.url) };
   const isolated = job.files?.isolated;
   const backing = job.files?.backing;
   if (!isolated || !backing) return null;
-  return { isolatedUrl: isolated.url, backingUrl: backing.url, isolatedLabel: isolated.label, backingLabel: backing.label, targetLabel: job.targetLabel || fallbackTargetLabel };
+  return { isolatedUrl: isolated.url, backingUrl: backing.url, isolatedLabel: isolated.label, backingLabel: backing.label, targetLabel: job.targetLabel || fallbackTargetLabel, target: job.target || fallbackTarget };
+}
+
+function buildPracticeTracks(result: ResultState | null): PracticeTrack[] {
+  if (!result?.target || !result.isolatedUrl || !result.backingUrl) return [];
+  return [
+    { id: result.target, label: result.isolatedLabel || result.targetLabel || "目标轨道", url: result.isolatedUrl },
+    { id: defaultPracticeTrackMap[result.target], label: result.backingLabel || "练习伴奏", url: result.backingUrl }
+  ];
 }
 
 function toUserError(error: unknown) {
@@ -744,4 +884,9 @@ function formatFileSize(size: number) {
 
 function readAudioDuration(audio: HTMLAudioElement, setDuration: (duration: number) => void) {
   if (Number.isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
+}
+
+function controlRangeBackground(percent: number) {
+  const safePercent = Math.min(Math.max(percent, 0), 100);
+  return { background: `linear-gradient(to right, #292722 0%, #292722 ${safePercent}%, rgba(41,39,34,.15) ${safePercent}%, rgba(41,39,34,.15) 100%)` };
 }
