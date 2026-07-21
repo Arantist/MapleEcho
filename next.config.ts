@@ -51,22 +51,17 @@ function resolvesToPrivateHost(value: string) {
 }
 
 const backendApiBaseUrl = resolveBackendApiBaseUrl();
-const staticExport = process.env.STATIC_EXPORT === "1";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["ffmpeg-static", "ffprobe-static"],
-  ...(staticExport
-    ? { output: "export" as const }
-    : {
-        async rewrites() {
-          return [
-            {
-              source: "/api/backend/:path*",
-              destination: `${backendApiBaseUrl.replace(/\/+$/, "")}/:path*`
-            }
-          ];
-        }
-      })
+  async rewrites() {
+    return [
+      {
+        source: "/api/backend/:path*",
+        destination: `${backendApiBaseUrl.replace(/\/+$/, "")}/:path*`
+      }
+    ];
+  }
 };
 
 export default nextConfig;
