@@ -1,5 +1,7 @@
 name: Vercel Deploy
 
+# Vercel validates the real Git commit author against the project account.
+
 on:
   push:
     branches:
