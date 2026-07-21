@@ -42,3 +42,23 @@ jobs:
           vercel deploy --prod --force --yes
           --meta githubCommitAuthorEmail="$VERCEL_GIT_AUTHOR_EMAIL"
           --token="$VERCEL_TOKEN"
+
+      - name: Restrict public domains
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --request PATCH \
+            --header "Authorization: Bearer $VERCEL_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data '{"redirect":"fengye-rain.life","redirectStatusCode":308}' \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID/domains/www.fengye-rain.life?teamId=$VERCEL_ORG_ID" \
+            > /dev/null
+
+          delete_status=$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
+            --request DELETE \
+            --header "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID/domains/local-stem-splitter.vercel.app?teamId=$VERCEL_ORG_ID")
+
+          if [[ "$delete_status" != "200" && "$delete_status" != "404" ]]; then
+            echo "Failed to remove the public Vercel default domain: HTTP $delete_status"
+            exit 1
+          fi
