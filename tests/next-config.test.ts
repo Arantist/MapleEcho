@@ -21,4 +21,9 @@ describe("next config backend rewrite", () => {
     expect(resolveBackendApiBaseUrl("http://127.0.0.1:8000", "production")).toBe("http://34.136.34.53:8000");
     expect(resolveBackendApiBaseUrl("http://192.168.1.20:8000", "production")).toBe("http://34.136.34.53:8000");
   });
+
+  test("falls back when the configured backend value is protected or invalid", () => {
+    expect(resolveBackendApiBaseUrl("[SENSITIVE]", "production")).toBe("http://34.136.34.53:8000");
+    expect(resolveBackendApiBaseUrl("ftp://api.example.com", "production")).toBe("http://34.136.34.53:8000");
+  });
 });

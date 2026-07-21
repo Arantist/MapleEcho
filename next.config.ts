@@ -9,11 +9,24 @@ export function resolveBackendApiBaseUrl(
   const candidate = value?.trim();
   if (!candidate) return DEFAULT_BACKEND_API_BASE_URL;
 
+  if (!isHttpUrl(candidate)) {
+    return DEFAULT_BACKEND_API_BASE_URL;
+  }
+
   if (vercelEnv === "production" && resolvesToPrivateHost(candidate)) {
     return DEFAULT_BACKEND_API_BASE_URL;
   }
 
   return candidate;
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function resolvesToPrivateHost(value: string) {
