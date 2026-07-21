@@ -12,6 +12,7 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_GIT_AUTHOR_EMAIL: ${{ secrets.VERCEL_GIT_AUTHOR_EMAIL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,11 +35,8 @@ jobs:
       - name: Pull Vercel production environment
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
-      - name: Ensure production project is active
-        run: >-
-          curl --fail --silent --show-error --request POST
-          --header "Authorization: Bearer $VERCEL_TOKEN"
-          "https://api.vercel.com/v1/projects/$VERCEL_PROJECT_ID/unpause?teamId=$VERCEL_ORG_ID"
-
       - name: Deploy production
-        run: vercel deploy --prod --force --yes --token="$VERCEL_TOKEN"
+        run: >-
+          vercel deploy --prod --force --yes
+          --meta githubCommitAuthorEmail="$VERCEL_GIT_AUTHOR_EMAIL"
+          --token="$VERCEL_TOKEN"
