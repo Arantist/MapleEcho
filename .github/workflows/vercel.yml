@@ -75,4 +75,19 @@ jobs:
         run: vercel build --prod --token="$VERCEL_TOKEN"
 
       - name: Deploy production
-        run: vercel deploy --prebuilt --prod --yes --no-wait --token="$VERCEL_TOKEN"
+        shell: bash
+        run: |
+          set +e
+          deploy_output=$(vercel deploy --prebuilt --prod --yes --no-wait --token="$VERCEL_TOKEN" 2>&1)
+          deploy_status=$?
+          set -e
+          printf '%s\n' "$deploy_output"
+
+          if [ "$deploy_status" -ne 0 ]; then
+            deployment_url=$(printf '%s\n' "$deploy_output" | grep -Eo 'https://[^[:space:]]+\.vercel\.app' | tail -n 1 || true)
+            if [ -n "$deployment_url" ]; then
+              vercel inspect "$deployment_url" --token="$VERCEL_TOKEN" || true
+              vercel inspect "$deployment_url" --logs --token="$VERCEL_TOKEN" || true
+            fi
+            exit "$deploy_status"
+          fi
