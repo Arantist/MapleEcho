@@ -29,6 +29,7 @@ import {
 import { clampPlaybackTime, defaultPracticeTrackMap, formatPlaybackTime, progressPercent } from "@/lib/player";
 import { usePracticePlayer, type PracticePlayer } from "@/lib/use-practice-player";
 import type { JobMode, JobRecord, PracticeTrack, PracticeTrackId, TargetStem } from "@/lib/types";
+import { APP_VERSION_LABEL } from "@/lib/version";
 
 type UiMode = "standard" | "quality" | "convert";
 
@@ -293,8 +294,16 @@ function AppHeader() {
             <div className="truncate text-xs text-[#7d776d]">再也不用付费做伴奏啦～</div>
           </div>
         </div>
-        <div className="hidden shrink-0 items-center gap-2 text-sm text-[#716c63] md:flex">
-          <span>单文件</span><Dot /><span>后端处理</span>
+        <div className="flex shrink-0 items-center gap-3">
+          <span
+            className="rounded-full border border-[#ded8ca] bg-[#f8f5ed] px-2.5 py-1 text-xs font-medium text-[#716c63]"
+            aria-label={`当前版本 ${APP_VERSION_LABEL}`}
+          >
+            {APP_VERSION_LABEL}
+          </span>
+          <div className="hidden items-center gap-2 text-sm text-[#716c63] md:flex">
+            <span>单文件</span><Dot /><span>后端处理</span>
+          </div>
         </div>
       </div>
     </header>
