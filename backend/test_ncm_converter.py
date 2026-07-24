@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ncm_converter import (
     INVALID_NCM_FILE,
+    NCM_CONVERTER_UNAVAILABLE,
     NCM_CONVERSION_FAILED,
     NCM_CONVERSION_TIMEOUT,
     NCM_OUTPUT_INVALID,
@@ -29,6 +30,17 @@ class Completed:
 
 
 class NcmConverterTest(unittest.TestCase):
+    def test_reports_missing_ncmdump_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = write_ncm(root / "song.ncm")
+
+            with patch("ncm_converter.importlib.util.find_spec", return_value=None):
+                with self.assertRaises(NcmConversionError) as raised:
+                    convert_ncm_to_standard_audio(input_path, root / "work")
+
+            self.assertEqual(raised.exception.code, NCM_CONVERTER_UNAVAILABLE)
+
     def test_rejects_invalid_ncm_header(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

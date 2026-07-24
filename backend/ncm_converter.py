@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -10,12 +11,14 @@ NCM_MAGIC = bytes.fromhex("4354454e4644414d")
 NCM_TIMEOUT_SECONDS = 300
 
 INVALID_NCM_FILE = "INVALID_NCM_FILE"
+NCM_CONVERTER_UNAVAILABLE = "NCM_CONVERTER_UNAVAILABLE"
 NCM_CONVERSION_FAILED = "NCM_CONVERSION_FAILED"
 NCM_CONVERSION_TIMEOUT = "NCM_CONVERSION_TIMEOUT"
 NCM_OUTPUT_INVALID = "NCM_OUTPUT_INVALID"
 
 NCM_ERROR_MESSAGES = {
     INVALID_NCM_FILE: "无法识别该 NCM 文件，请确认文件完整后重试。",
+    NCM_CONVERTER_UNAVAILABLE: "NCM 转换服务暂时不可用，请稍后重试。",
     NCM_CONVERSION_FAILED: "NCM 文件转换失败，请更换文件后重试。",
     NCM_CONVERSION_TIMEOUT: "NCM 文件转换超时，请稍后重试。",
     NCM_OUTPUT_INVALID: "文件已转换，但未检测到有效音频内容。",
@@ -68,6 +71,9 @@ def validate_ncm_file(input_path: Path) -> None:
 
 
 def run_ncmdump(input_path: Path, output_dir: Path) -> None:
+    if not ncmdump_available():
+        raise NcmConversionError(NCM_CONVERTER_UNAVAILABLE, "ncmdump dependency is unavailable")
+
     timeout = int(os.getenv("NCM_CONVERSION_TIMEOUT_SECONDS", str(NCM_TIMEOUT_SECONDS)))
     command = [
         sys.executable,
@@ -84,6 +90,13 @@ def run_ncmdump(input_path: Path, output_dir: Path) -> None:
         raise NcmConversionError(NCM_CONVERSION_TIMEOUT) from error
     if completed.returncode != 0:
         raise NcmConversionError(NCM_CONVERSION_FAILED, tail(completed.stderr or completed.stdout))
+
+
+def ncmdump_available() -> bool:
+    try:
+        return importlib.util.find_spec("ncmdump") is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
 
 
 def run_ffmpeg_to_mp3(input_path: Path, output_path: Path) -> None:
