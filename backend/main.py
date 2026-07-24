@@ -46,14 +46,21 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict[str, bool | int | float | str | list[str]]:
+    ffmpeg = executable_exists("ffmpeg")
+    ffprobe = executable_exists("ffprobe")
+    python = Path(sys.executable).exists()
+    demucs = executable_exists("demucs") or python_module_exists("demucs")
+    torch = python_module_exists("torch")
+    ncmdump = python_module_exists("ncmdump")
     return {
-        "ok": True,
+        "ok": ffmpeg and ffprobe and python and demucs and torch and ncmdump,
         "service": SERVICE_NAME,
-        "ffmpeg": executable_exists("ffmpeg"),
-        "ffprobe": executable_exists("ffprobe"),
-        "python": Path(sys.executable).exists(),
-        "demucs": executable_exists("demucs") or python_module_exists("demucs"),
-        "torch": python_module_exists("torch"),
+        "ffmpeg": ffmpeg,
+        "ffprobe": ffprobe,
+        "python": python,
+        "demucs": demucs,
+        "torch": torch,
+        "ncmdump": ncmdump,
         "cpuCores": os.cpu_count() or 1,
         "memoryGb": memory_gb(),
         "pythonVersion": platform.python_version(),

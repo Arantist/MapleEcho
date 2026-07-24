@@ -89,6 +89,7 @@ export type BackendHealth = {
   python: boolean;
   demucs: boolean;
   torch?: boolean;
+  ncmdump?: boolean;
   cpuCores?: number;
   memoryGb?: number;
   model?: string;
