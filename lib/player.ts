@@ -15,6 +15,24 @@ export function formatPlaybackTime(seconds: number) {
   return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+export function parsePlaybackTime(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  if (/^\d+$/.test(normalized)) {
+    const seconds = Number(normalized);
+    return Number.isSafeInteger(seconds) ? seconds : null;
+  }
+
+  const match = normalized.match(/^(\d+):([0-5]?\d)$/);
+  if (!match) return null;
+
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  const totalSeconds = minutes * 60 + seconds;
+  return Number.isSafeInteger(totalSeconds) ? totalSeconds : null;
+}
+
 export function clampPlaybackTime(seconds: number, duration: number) {
   if (!Number.isFinite(seconds) || !Number.isFinite(duration) || duration <= 0) return 0;
   return Math.min(Math.max(seconds, 0), duration);

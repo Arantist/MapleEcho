@@ -26,8 +26,9 @@ import {
   fetchBackendJob,
   getApiBaseUrl
 } from "@/lib/api-client";
-import { clampPlaybackTime, defaultPracticeTrackMap, formatPlaybackTime, progressPercent } from "@/lib/player";
+import { clampPlaybackTime, defaultPracticeTrackMap, formatPlaybackTime, parsePlaybackTime, progressPercent } from "@/lib/player";
 import { usePracticePlayer, type PracticePlayer } from "@/lib/use-practice-player";
+import { APP_VERSION } from "@/lib/version";
 import type { JobMode, JobRecord, PracticeTrack, PracticeTrackId, TargetStem } from "@/lib/types";
 
 type UiMode = "standard" | "quality" | "convert";
@@ -214,7 +215,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f3ed] text-[#1d1c19]">
+    <main className="min-h-screen bg-[#f5f3ed] pt-[72px] text-[#1d1c19]">
       <AppHeader />
       {practiceAudioElement}
 
@@ -282,7 +283,7 @@ export default function Home() {
 
 function AppHeader() {
   return (
-    <header className="border-b border-[#e4e0d7] bg-[#fffefc]">
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-[#e4e0d7] bg-[#fffefc]">
       <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-6 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-[#ded8ca] bg-[#f8f5ed] text-[#26241f]">
@@ -293,8 +294,13 @@ function AppHeader() {
             <div className="truncate text-xs text-[#7d776d]">再也不用付费做伴奏啦～</div>
           </div>
         </div>
-        <div className="hidden shrink-0 items-center gap-2 text-sm text-[#716c63] md:flex">
-          <span>单文件</span><Dot /><span>后端处理</span>
+        <div className="flex shrink-0 items-center gap-2 text-sm text-[#716c63]">
+          <span className="rounded-full border border-[#ded8cc] bg-[#f8f5ed] px-3 py-1 text-xs font-semibold tabular-nums text-[#776f64]">
+            {APP_VERSION}
+          </span>
+          <span className="hidden items-center gap-2 md:flex">
+            <span>单文件</span><Dot /><span>后端处理</span>
+          </span>
         </div>
       </div>
     </header>
@@ -610,8 +616,8 @@ function PracticePanel({ tracks, player }: { tracks: PracticeTrack[]; player: Pr
         {mode === "loop" ? (
           <div>
             <div className="grid grid-cols-2 gap-3">
-              <LoopPoint label="A / 起点" value={player.loopStart} disabled={disabled || player.duration <= 0} onSet={player.setLoopStartAtCurrentTime} />
-              <LoopPoint label="B / 终点" value={player.loopEnd} disabled={disabled || player.duration <= 0} onSet={player.setLoopEndAtCurrentTime} />
+              <LoopPoint key={`loop-start-${player.loopStart}`} label="A / 起点" value={player.loopStart} disabled={disabled || player.duration <= 0} onChange={player.setLoopStart} onSetCurrent={player.setLoopStartAtCurrentTime} />
+              <LoopPoint key={`loop-end-${player.loopEnd}`} label="B / 终点" value={player.loopEnd} disabled={disabled || player.duration <= 0} onChange={player.setLoopEnd} onSetCurrent={player.setLoopEndAtCurrentTime} />
             </div>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <button type="button" disabled={disabled || player.duration <= 0} onClick={() => player.setLoopEnabled(!player.loopEnabled)} className={`h-10 rounded-[10px] border text-sm font-semibold ${player.loopEnabled ? "border-[#2c2a25] bg-[#2c2a25] text-white" : "border-[#d7d1c6] bg-white text-[#4d4942]"} disabled:cursor-not-allowed`}>
@@ -649,12 +655,83 @@ function PracticePanel({ tracks, player }: { tracks: PracticeTrack[]; player: Pr
   );
 }
 
-function LoopPoint({ label, value, disabled, onSet }: { label: string; value: number; disabled: boolean; onSet: () => void }) {
+function LoopPoint({
+  label,
+  value,
+  disabled,
+  onChange,
+  onSetCurrent
+}: {
+  label: string;
+  value: number;
+  disabled: boolean;
+  onChange: (seconds: number) => boolean;
+  onSetCurrent: () => void;
+}) {
+  const [draft, setDraft] = useState(formatPlaybackTime(value));
+  const [errorText, setErrorText] = useState("");
+  const invalid = errorText.length > 0;
+
+  function commit() {
+    const seconds = parsePlaybackTime(draft);
+    if (seconds === null) {
+      setErrorText("请输入有效时间，如 1:30 或 90");
+      return;
+    }
+    if (onChange(seconds)) {
+      setDraft(formatPlaybackTime(seconds));
+      setErrorText("");
+      return;
+    }
+    setDraft(formatPlaybackTime(value));
+    setErrorText("时间超出有效范围");
+  }
+
   return (
-    <button type="button" disabled={disabled} onClick={onSet} className="rounded-[10px] border border-[#d7d1c6] bg-white px-3 py-2.5 text-left disabled:cursor-not-allowed">
-      <span className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-[#81796e]">{label}</span>
-      <span className="mt-1 block font-mono text-sm font-semibold tabular-nums text-[#2e2b26]">{formatPlaybackTime(value)}</span>
-    </button>
+    <div className={`rounded-[10px] border bg-white px-3 py-2.5 ${invalid ? "border-[#a13b45]" : "border-[#d7d1c6]"} ${disabled ? "opacity-60" : ""}`}>
+      <label className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-[#81796e]">
+        {label}
+        <input
+          type="text"
+          value={draft}
+          disabled={disabled}
+          inputMode="text"
+          autoComplete="off"
+          spellCheck={false}
+          aria-invalid={invalid}
+          aria-label={`${label}时间，支持分:秒或总秒数`}
+          title="输入分:秒或总秒数"
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setErrorText("");
+          }}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setDraft(formatPlaybackTime(value));
+              setErrorText("");
+              event.currentTarget.select();
+            }
+          }}
+          className="mt-1 block h-7 w-full min-w-0 rounded-[6px] bg-transparent px-1 font-mono text-sm font-semibold tabular-nums text-[#2e2b26] outline-none ring-[#8b7f6d] transition-shadow focus:bg-[#faf8f3] focus:ring-2 disabled:cursor-not-allowed"
+        />
+      </label>
+      {errorText ? <span className="mt-1 block text-[10px] font-medium text-[#9b303b]">{errorText}</span> : null}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          setDraft(formatPlaybackTime(value));
+          setErrorText("");
+          onSetCurrent();
+        }}
+        className="mt-1 text-[10px] font-semibold text-[#756d61] underline-offset-2 hover:text-[#292722] hover:underline disabled:cursor-not-allowed"
+      >
+        设为当前播放位置
+      </button>
+    </div>
   );
 }
 

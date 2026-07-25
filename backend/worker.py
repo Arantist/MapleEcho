@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ from ncm_converter import (
 
 JobStatus = Literal["queued", "processing", "completed", "failed"]
 JobMode = Literal["balanced", "quality", "convert"]
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -62,6 +64,7 @@ def run_job(job_id: str) -> None:
         job.progress = 100
         job.message = "分离完成。"
     except NcmConversionError as error:
+        logger.error("NCM conversion failed for job %s (%s): %s", job.job_id, error.code, error.detail)
         job.status = "failed"
         job.progress = 100
         job.error_code = error.code

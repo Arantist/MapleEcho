@@ -30,6 +30,8 @@ export type PracticePlayer = {
   seek: (seconds: number) => void;
   setPlaybackRate: (rate: number) => void;
   setPitchSemitones: (semitones: number) => Promise<void>;
+  setLoopStart: (seconds: number) => boolean;
+  setLoopEnd: (seconds: number) => boolean;
   setLoopStartAtCurrentTime: () => void;
   setLoopEndAtCurrentTime: () => void;
   setLoopEnabled: (enabled: boolean) => void;
@@ -75,12 +77,12 @@ export function usePracticePlayer(
     setActiveTrackIdState(trackId);
   }, []);
 
-  const setLoopStart = useCallback((value: number) => {
+  const updateLoopStart = useCallback((value: number) => {
     loopStartRef.current = value;
     setLoopStartState(value);
   }, []);
 
-  const setLoopEnd = useCallback((value: number) => {
+  const updateLoopEnd = useCallback((value: number) => {
     loopEndRef.current = value;
     setLoopEndState(value);
   }, []);
@@ -94,12 +96,12 @@ export function usePracticePlayer(
   }, [duration]);
 
   const resetLoop = useCallback(() => {
-    setLoopStart(0);
-    setLoopEnd(duration);
+    updateLoopStart(0);
+    updateLoopEnd(duration);
     loopEnabledRef.current = false;
     setLoopEnabledState(false);
     setMessage("");
-  }, [duration, setLoopEnd, setLoopStart]);
+  }, [duration, updateLoopEnd, updateLoopStart]);
 
   const applyAudioSettings = useCallback((rate: number, semitones: number) => {
     const audio = audioRef.current;
@@ -185,8 +187,8 @@ export function usePracticePlayer(
       setActiveTrackId(trackId);
       setCurrentTime(0);
       setDuration(0);
-      setLoopStart(0);
-      setLoopEnd(0);
+      updateLoopStart(0);
+      updateLoopEnd(0);
       loopEnabledRef.current = false;
       setLoopEnabledState(false);
       setMessage("");
@@ -202,7 +204,7 @@ export function usePracticePlayer(
         setMessage("播放启动失败，请再次点击播放。");
       }
     }
-  }, [applyAudioSettings, ensurePitchEngine, setActiveTrackId, setLoopEnd, setLoopStart, tracks]);
+  }, [applyAudioSettings, ensurePitchEngine, setActiveTrackId, tracks, updateLoopEnd, updateLoopStart]);
 
   const toggleTrackPlayback = useCallback(async (trackId: PracticeTrackId) => {
     const audio = audioRef.current;
@@ -249,27 +251,57 @@ export function usePracticePlayer(
     setMessage("");
   }, [applyAudioSettings, ensurePitchEngine]);
 
+  const setLoopStart = useCallback((seconds: number) => {
+    if (duration <= 0) return false;
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds > duration) {
+      setMessage(`A 点需在 0:00–${formatLoopTime(duration)} 之间。`);
+      return false;
+    }
+    if (seconds > loopEndRef.current - 0.1) {
+      setMessage("A 点必须早于 B 点。");
+      return false;
+    }
+    updateLoopStart(seconds);
+    setMessage("");
+    return true;
+  }, [duration, updateLoopStart]);
+
+  const setLoopEnd = useCallback((seconds: number) => {
+    if (duration <= 0) return false;
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds > duration) {
+      setMessage(`B 点需在 0:00–${formatLoopTime(duration)} 之间。`);
+      return false;
+    }
+    if (seconds < loopStartRef.current + 0.1) {
+      setMessage("B 点必须晚于 A 点。");
+      return false;
+    }
+    updateLoopEnd(seconds);
+    setMessage("");
+    return true;
+  }, [duration, updateLoopEnd]);
+
   const setLoopStartAtCurrentTime = useCallback(() => {
     if (duration <= 0) return;
     const maximum = Math.max(loopEndRef.current - 0.1, 0);
     const nextStart = Math.min(clampLoopPoint(audioRef.current?.currentTime ?? 0, duration), maximum);
-    setLoopStart(nextStart);
+    updateLoopStart(nextStart);
     setMessage("");
-  }, [duration, setLoopStart]);
+  }, [duration, updateLoopStart]);
 
   const setLoopEndAtCurrentTime = useCallback(() => {
     if (duration <= 0) return;
     const minimum = Math.min(loopStartRef.current + 0.1, duration);
     const nextEnd = Math.max(clampLoopPoint(audioRef.current?.currentTime ?? duration, duration), minimum);
-    setLoopEnd(nextEnd);
+    updateLoopEnd(nextEnd);
     setMessage("");
-  }, [duration, setLoopEnd]);
+  }, [duration, updateLoopEnd]);
 
   const updateDuration = useCallback((audio: HTMLAudioElement) => {
     if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
     setDuration(audio.duration);
-    if (loopEndRef.current <= 0 || loopEndRef.current > audio.duration) setLoopEnd(audio.duration);
-  }, [setLoopEnd]);
+    if (loopEndRef.current <= 0 || loopEndRef.current > audio.duration) updateLoopEnd(audio.duration);
+  }, [updateLoopEnd]);
 
   const checkLoopBoundary = useCallback((audio: HTMLAudioElement) => {
     if (
@@ -296,8 +328,8 @@ export function usePracticePlayer(
       setActiveTrackId(null);
       setCurrentTime(0);
       setDuration(0);
-      setLoopStart(0);
-      setLoopEnd(0);
+      updateLoopStart(0);
+      updateLoopEnd(0);
       loopEnabledRef.current = false;
       setLoopEnabledState(false);
       return;
@@ -308,13 +340,13 @@ export function usePracticePlayer(
     setActiveTrackId(nextTrack.id);
     setCurrentTime(0);
     setDuration(0);
-    setLoopStart(0);
-    setLoopEnd(0);
+    updateLoopStart(0);
+    updateLoopEnd(0);
     loopEnabledRef.current = false;
     setLoopEnabledState(false);
     setMessage("");
     applyAudioSettings(playbackRateRef.current, pitchSemitonesRef.current);
-  }, [applyAudioSettings, defaultTrackId, setActiveTrackId, setLoopEnd, setLoopStart, tracks]);
+  }, [applyAudioSettings, defaultTrackId, setActiveTrackId, tracks, updateLoopEnd, updateLoopStart]);
 
   useEffect(() => {
     if (!playing || !loopEnabled) return;
@@ -382,10 +414,17 @@ export function usePracticePlayer(
       seek,
       setPlaybackRate,
       setPitchSemitones,
+      setLoopStart,
+      setLoopEnd,
       setLoopStartAtCurrentTime,
       setLoopEndAtCurrentTime,
       setLoopEnabled,
       resetLoop
     }
   };
+}
+
+function formatLoopTime(seconds: number) {
+  const wholeSeconds = Math.floor(Math.max(seconds, 0));
+  return `${Math.floor(wholeSeconds / 60)}:${String(wholeSeconds % 60).padStart(2, "0")}`;
 }

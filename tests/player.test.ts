@@ -7,6 +7,7 @@ import {
   defaultPracticeTrackMap,
   formatPlaybackTime,
   hasValidLoop,
+  parsePlaybackTime,
   progressPercent
 } from "@/lib/player";
 
@@ -17,6 +18,16 @@ describe("audio player helpers", () => {
     expect(formatPlaybackTime(264)).toBe("4:24");
     expect(formatPlaybackTime(Number.NaN)).toBe("0:00");
     expect(formatPlaybackTime(Number.POSITIVE_INFINITY)).toBe("0:00");
+  });
+
+  test("parses custom loop times from minute:second or total-second input", () => {
+    expect(parsePlaybackTime("1:30")).toBe(90);
+    expect(parsePlaybackTime(" 03:05 ")).toBe(185);
+    expect(parsePlaybackTime("90")).toBe(90);
+    expect(parsePlaybackTime("1:60")).toBeNull();
+    expect(parsePlaybackTime("1:2:03")).toBeNull();
+    expect(parsePlaybackTime("-1")).toBeNull();
+    expect(parsePlaybackTime("")).toBeNull();
   });
 
   test("clamps requested seek time to the playable duration", () => {
